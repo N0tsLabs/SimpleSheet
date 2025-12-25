@@ -1,0 +1,20 @@
+/**
+ * SimpleSheet 主样式入口
+ * 
+ * 支持主题：
+ * - 默认跟随系统主题
+ * - data-theme="light" 强制浅色
+ * - data-theme="dark" 强制深色
+ */
+
+@import './variables.css';
+@import './base.css';
+@import './cell.css';
+@import './selection.css';
+@import './editor.css';
+@import './scrollbar.css';
+@import './animations.css';
+@import './context-menu.css';
+@import './renderers.css';
+@import './plugins.css';
+

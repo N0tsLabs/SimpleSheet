@@ -1,0 +1,103 @@
+/**
+ * 右键菜单样式
+ */
+
+.ss-context-menu {
+  position: fixed;
+  z-index: 10000;
+  min-width: 180px;
+  background: var(--ss-bg-color);
+  border: 1px solid var(--ss-border-color);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  padding: 6px 0;
+  font-size: 13px;
+  animation: ss-menu-fade-in 0.15s ease;
+}
+
+@keyframes ss-menu-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.ss-submenu {
+  animation: ss-submenu-slide-in 0.15s ease;
+}
+
+@keyframes ss-submenu-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.ss-menu-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+  color: var(--ss-text-color);
+  gap: 8px;
+}
+
+.ss-menu-item:hover {
+  background-color: var(--ss-primary-color-light);
+}
+
+.ss-menu-item-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ss-menu-item-disabled:hover {
+  background-color: transparent;
+}
+
+.ss-menu-icon {
+  width: 20px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.ss-menu-label {
+  flex: 1;
+}
+
+.ss-menu-shortcut {
+  font-size: 11px;
+  color: var(--ss-text-color-secondary);
+  margin-left: 24px;
+}
+
+.ss-menu-arrow {
+  font-size: 10px;
+  color: var(--ss-text-color-secondary);
+  margin-left: 8px;
+}
+
+.ss-menu-item-has-children {
+  position: relative;
+}
+
+.ss-menu-divider {
+  height: 1px;
+  background-color: var(--ss-border-color-light);
+  margin: 6px 12px;
+}
+
+/* 深色主题适配 */
+[data-theme="dark"] .ss-context-menu {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+

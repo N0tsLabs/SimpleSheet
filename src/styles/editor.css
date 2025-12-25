@@ -1,0 +1,188 @@
+/**
+ * 编辑器样式
+ */
+
+/* 编辑器层 */
+.ss-editor-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: var(--ss-z-editor);
+  overflow: hidden;
+}
+
+/* 编辑器容器 */
+.ss-editor-container {
+  pointer-events: auto;
+  animation: ss-editor-fade-in var(--ss-transition-fast);
+}
+
+@keyframes ss-editor-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 通用编辑器样式 */
+.ss-editor {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  background-color: var(--ss-bg-color);
+  box-shadow: var(--ss-shadow-md), 0 0 0 2px var(--ss-primary-color);
+  box-sizing: border-box;
+}
+
+/* 编辑器输入框 */
+.ss-editor-input {
+  width: 100%;
+  height: 100%;
+  padding: var(--ss-cell-padding);
+  border: none;
+  outline: none;
+  font-family: var(--ss-font-family);
+  font-size: var(--ss-font-size);
+  line-height: var(--ss-line-height);
+  color: var(--ss-text-color);
+  background-color: transparent;
+  box-sizing: border-box;
+}
+
+.ss-editor-input::placeholder {
+  color: var(--ss-text-color-disabled);
+}
+
+.ss-editor-input:focus {
+  outline: none;
+}
+
+/* 文本编辑器 */
+.ss-text-editor {
+  /* 继承通用样式 */
+}
+
+/* Textarea 样式 */
+.ss-editor-textarea {
+  width: 100%;
+  min-height: 100%;
+  padding: var(--ss-cell-padding);
+  border: none;
+  outline: none;
+  font-family: var(--ss-font-family);
+  font-size: var(--ss-font-size);
+  line-height: var(--ss-line-height);
+  color: var(--ss-text-color);
+  background-color: transparent;
+  resize: none;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* 数字编辑器 */
+.ss-number-editor .ss-editor-input {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 日期编辑器 */
+.ss-date-editor .ss-editor-input {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 下拉选择编辑器 */
+.ss-select-editor {
+  position: relative;
+}
+
+.ss-select-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  background-color: var(--ss-bg-color);
+  border: var(--ss-border-width) solid var(--ss-border-color);
+  border-top: none;
+  box-shadow: var(--ss-shadow-lg);
+  z-index: var(--ss-z-dropdown);
+  animation: ss-dropdown-slide-in var(--ss-transition-normal);
+}
+
+@keyframes ss-dropdown-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ss-select-option {
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color var(--ss-transition-fast);
+}
+
+.ss-select-option:hover {
+  background-color: var(--ss-row-bg-hover);
+}
+
+.ss-select-option.ss-selected {
+  background-color: var(--ss-primary-color-light);
+  color: var(--ss-primary-color);
+}
+
+/* 多行文本编辑器 */
+.ss-textarea-editor {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.ss-textarea-editor textarea {
+  width: 100%;
+  height: 100%;
+  min-height: 60px;
+  padding: var(--ss-cell-padding);
+  border: none;
+  outline: none;
+  font-family: var(--ss-font-family);
+  font-size: var(--ss-font-size);
+  line-height: var(--ss-line-height);
+  color: var(--ss-text-color);
+  background-color: transparent;
+  resize: none;
+  box-sizing: border-box;
+}
+
+/* 验证错误提示 */
+.ss-editor-error {
+  position: absolute;
+  bottom: -24px;
+  left: 0;
+  padding: 2px 8px;
+  font-size: var(--ss-font-size-small);
+  color: white;
+  background-color: var(--ss-error-color);
+  border-radius: 2px;
+  white-space: nowrap;
+  animation: ss-error-shake 0.3s ease;
+}
+
+@keyframes ss-error-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+

@@ -1,0 +1,211 @@
+/**
+ * 单元格样式
+ */
+
+.ss-cell {
+  position: absolute;
+  top: 0;
+  display: flex;
+  align-items: center;
+  padding: var(--ss-cell-padding);
+  border-right: var(--ss-border-width) solid var(--ss-border-color-light);
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background-color: transparent;
+  transition: 
+    background-color var(--ss-transition-fast),
+    box-shadow var(--ss-transition-fast);
+  cursor: cell;
+}
+
+.ss-cell:hover {
+  background-color: var(--ss-row-bg-hover);
+}
+
+/* 行号单元格 */
+.ss-row-number {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  justify-content: center;
+  background-color: var(--ss-row-number-bg);
+  color: var(--ss-row-number-text);
+  font-size: var(--ss-font-size-small);
+  border-right: var(--ss-border-width) solid var(--ss-border-color);
+  cursor: pointer;
+  transition: background-color var(--ss-transition-fast);
+}
+
+.ss-row-number:hover {
+  background-color: var(--ss-header-bg-hover);
+  color: var(--ss-text-color);
+}
+
+/* 只读单元格 */
+.ss-cell-readonly {
+  background-color: var(--ss-readonly-bg);
+  color: var(--ss-text-color-secondary);
+  cursor: default;
+}
+
+.ss-cell-readonly:hover {
+  background-color: var(--ss-readonly-bg-hover);
+}
+
+/* 错误状态单元格 */
+.ss-cell-error {
+  background-color: rgba(239, 68, 68, 0.1);
+  border-color: var(--ss-error-color);
+}
+
+/* 单元格内容对齐 */
+.ss-cell[data-align="left"] {
+  justify-content: flex-start;
+}
+
+.ss-cell[data-align="center"] {
+  justify-content: center;
+}
+
+.ss-cell[data-align="right"] {
+  justify-content: flex-end;
+}
+
+/* 单元格内的链接 */
+.ss-cell a {
+  color: var(--ss-primary-color);
+  text-decoration: none;
+  transition: color var(--ss-transition-fast);
+}
+
+.ss-cell a:hover {
+  color: var(--ss-primary-color-hover);
+  text-decoration: underline;
+}
+
+/* 单元格内的图片 */
+.ss-cell img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* 单元格内的复选框 */
+.ss-cell-checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ss-cell-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--ss-primary-color);
+}
+
+/* 数字类型单元格 */
+.ss-cell-number {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 日期类型单元格 */
+.ss-cell-date {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==================== 多行文本样式 ==================== */
+
+/* 省略模式 - 腾讯文档风格 */
+.ss-cell.ss-wrap-ellipsis {
+  overflow: hidden;
+}
+
+/* 文本容器 - 用于处理省略号（因为父元素是 flex，需要在子元素上应用 text-overflow） */
+.ss-cell-text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0; /* 允许 flex 子元素收缩 */
+  flex: 1; /* 占据可用空间 */
+  pointer-events: none; /* 让鼠标事件穿透到父单元格，确保双击编辑正常 */
+}
+
+/* 自动换行模式 */
+.ss-cell.ss-wrap-text {
+  white-space: normal;
+  align-items: flex-start;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  overflow: hidden;
+}
+
+.ss-cell-multiline {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.4;
+  max-width: 100%;
+  overflow: hidden;
+  pointer-events: none; /* 让鼠标事件穿透到父单元格，确保双击编辑正常 */
+}
+
+/* 单元格展开浮层 - 选中时显示完整内容 */
+.ss-cell-expand-overlay {
+  position: fixed;
+  z-index: 100;
+  padding: 8px 12px;
+  background: #ffffff;
+  border: 2px solid #3b82f6;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #1f2937;
+  max-width: 400px;
+  max-height: 200px;
+  overflow: auto;
+  box-sizing: border-box;
+  animation: ss-expand-in 0.1s ease-out;
+}
+
+@keyframes ss-expand-in {
+  from {
+    opacity: 0.8;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 暗色主题下的展开浮层 */
+.ss-cell-expand-overlay[data-theme="dark"] {
+  background: #1f2937;
+  border-color: #60a5fa;
+  color: #f3f4f6;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* 搜索高亮 */
+.ss-cell-search-match {
+  background-color: var(--ss-search-highlight-bg, #fff3cd) !important;
+}
+
+.ss-cell-search-current {
+  background-color: var(--ss-search-current-bg, #ffc107) !important;
+  outline: 2px solid var(--ss-search-current-border, #ff9800);
+  outline-offset: -2px;
+}
+
+/* 暗色主题搜索高亮 */
+[data-theme="dark"] .ss-cell-search-match {
+  background-color: var(--ss-search-highlight-bg-dark, #5c4d1a) !important;
+}
+
+[data-theme="dark"] .ss-cell-search-current {
+  background-color: var(--ss-search-current-bg-dark, #7a6420) !important;
+  outline-color: var(--ss-search-current-border-dark, #ffa726);
+}
+

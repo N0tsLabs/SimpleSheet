@@ -1,0 +1,158 @@
+/**
+ * 基础样式
+ */
+
+/* 根容器 */
+.ss-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  font-family: var(--ss-font-family);
+  font-size: var(--ss-font-size);
+  line-height: var(--ss-line-height);
+  color: var(--ss-text-color);
+  background-color: var(--ss-bg-color);
+  border: var(--ss-border-width) solid var(--ss-border-color);
+  border-radius: var(--ss-border-radius);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 滚动容器 */
+.ss-scroll-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  scroll-behavior: smooth;
+}
+
+/* 表头 */
+.ss-header {
+  position: sticky;
+  top: 0;
+  z-index: var(--ss-z-header);
+  background-color: var(--ss-header-bg);
+  border-bottom: var(--ss-border-width) solid var(--ss-border-color);
+  /* 不使用 overflow: hidden，让表头行可以占据完整宽度 */
+}
+
+.ss-header-row {
+  display: flex;
+  position: relative;
+  /* 宽度由 JS 动态设置为总内容宽度 */
+}
+
+.ss-header-cell {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ss-header-padding);
+  font-weight: 500;
+  color: var(--ss-header-text-color);
+  background-color: var(--ss-header-bg);
+  border-right: var(--ss-border-width) solid var(--ss-border-color);
+  box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background-color var(--ss-transition-fast);
+}
+
+.ss-header-cell:hover {
+  background-color: var(--ss-header-bg-hover);
+}
+
+.ss-header-cell:last-child {
+  border-right: none;
+}
+
+/* 筛选状态指示器 */
+.ss-header-cell.ss-filter-active::after {
+  content: '⚡';
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--ss-primary-color);
+}
+
+/* 排序状态指示器 */
+.ss-header-cell.ss-sort-asc::before {
+  content: '▲';
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 8px;
+  color: var(--ss-primary-color);
+}
+
+.ss-header-cell.ss-sort-desc::before {
+  content: '▼';
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 8px;
+  color: var(--ss-primary-color);
+}
+
+/* 角落单元格（行号/列标交叉处） */
+.ss-corner-cell {
+  background-color: var(--ss-header-bg);
+  cursor: default;
+}
+
+/* 列宽调整手柄 */
+.ss-column-resizer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  transition: background-color var(--ss-transition-fast);
+  z-index: 1;
+}
+
+.ss-column-resizer:hover,
+.ss-column-resizer.ss-resizing {
+  background-color: var(--ss-primary-color);
+}
+
+/* 表体 */
+.ss-body {
+  position: relative;
+}
+
+.ss-body-content {
+  position: relative;
+}
+
+/* 行 */
+.ss-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  border-bottom: var(--ss-border-width) solid var(--ss-border-color-light);
+  background-color: var(--ss-row-bg);
+  transition: background-color var(--ss-transition-fast);
+  will-change: transform;
+}
+
+.ss-row:hover {
+  background-color: var(--ss-row-bg-hover);
+}
+
+/* 奇偶行交替颜色（可选） */
+.ss-row:nth-child(even) {
+  /* background-color: var(--ss-row-bg-alt); */
+}
+

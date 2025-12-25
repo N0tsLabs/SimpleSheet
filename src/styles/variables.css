@@ -1,0 +1,170 @@
+/**
+ * CSS 变量定义
+ * 支持明暗主题切换
+ */
+
+:root {
+  /* 颜色 - 通用 */
+  --ss-primary-color: #3b82f6;
+  --ss-primary-color-hover: #2563eb;
+  --ss-primary-color-light: rgba(59, 130, 246, 0.1);
+  --ss-success-color: #10b981;
+  --ss-warning-color: #f59e0b;
+  --ss-error-color: #ef4444;
+
+  /* 间距 */
+  --ss-cell-padding: 8px 12px;
+  --ss-header-padding: 8px 12px;
+  
+  /* 尺寸 */
+  --ss-border-radius: 0;
+  --ss-border-width: 1px;
+  
+  /* 字体 */
+  --ss-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --ss-font-size: 13px;
+  --ss-font-size-small: 12px;
+  --ss-line-height: 1.5;
+  
+  /* 过渡动画 */
+  --ss-transition-fast: 0.1s ease;
+  --ss-transition-normal: 0.2s ease;
+  --ss-transition-slow: 0.3s ease;
+  
+  /* 阴影 */
+  --ss-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --ss-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --ss-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  
+  /* 层级 */
+  --ss-z-cell: 1;
+  --ss-z-header: 10;
+  --ss-z-selection: 20;
+  --ss-z-editor: 30;
+  --ss-z-dropdown: 40;
+  --ss-z-tooltip: 50;
+}
+
+/* 浅色主题（默认） */
+:root,
+[data-theme="light"] {
+  /* 背景色 */
+  --ss-bg-color: #ffffff;
+  --ss-bg-color-secondary: #f9fafb;
+  --ss-header-bg: #f3f4f6;
+  --ss-header-bg-hover: #e5e7eb;
+  --ss-row-bg: #ffffff;
+  --ss-row-bg-hover: #f9fafb;
+  --ss-row-bg-alt: #fafafa;
+  
+  /* 边框色 */
+  --ss-border-color: #e5e7eb;
+  --ss-border-color-light: #f3f4f6;
+  --ss-border-color-dark: #d1d5db;
+  
+  /* 文字色 */
+  --ss-text-color: #1f2937;
+  --ss-text-color-secondary: #6b7280;
+  --ss-text-color-disabled: #9ca3af;
+  --ss-header-text-color: #374151;
+  
+  /* 选区 */
+  --ss-selection-bg: rgba(59, 130, 246, 0.08);
+  --ss-selection-border: #3b82f6;
+  
+  /* 行号 */
+  --ss-row-number-bg: #f9fafb;
+  --ss-row-number-text: #9ca3af;
+  
+  /* 只读单元格 - 使用更明显的灰色 */
+  --ss-readonly-bg: #f3f4f6;
+  --ss-readonly-bg-hover: #e5e7eb;
+  
+  /* 滚动条 */
+  --ss-scrollbar-track: #f1f1f1;
+  --ss-scrollbar-thumb: #c1c1c1;
+  --ss-scrollbar-thumb-hover: #a1a1a1;
+}
+
+/* 深色主题 */
+[data-theme="dark"] {
+  /* 背景色 */
+  --ss-bg-color: #1f2937;
+  --ss-bg-color-secondary: #111827;
+  --ss-header-bg: #374151;
+  --ss-header-bg-hover: #4b5563;
+  --ss-row-bg: #1f2937;
+  --ss-row-bg-hover: #374151;
+  --ss-row-bg-alt: #263040;
+  
+  /* 边框色 */
+  --ss-border-color: #374151;
+  --ss-border-color-light: #4b5563;
+  --ss-border-color-dark: #1f2937;
+  
+  /* 文字色 */
+  --ss-text-color: #f3f4f6;
+  --ss-text-color-secondary: #9ca3af;
+  --ss-text-color-disabled: #6b7280;
+  --ss-header-text-color: #e5e7eb;
+  
+  /* 选区 */
+  --ss-selection-bg: rgba(59, 130, 246, 0.15);
+  --ss-selection-border: #60a5fa;
+  
+  /* 行号 */
+  --ss-row-number-bg: #263040;
+  --ss-row-number-text: #6b7280;
+  
+  /* 只读单元格 */
+  --ss-readonly-bg: #374151;
+  --ss-readonly-bg-hover: #4b5563;
+  
+  /* 滚动条 */
+  --ss-scrollbar-track: #374151;
+  --ss-scrollbar-thumb: #4b5563;
+  --ss-scrollbar-thumb-hover: #6b7280;
+}
+
+/* 自动跟随系统主题 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    /* 背景色 */
+    --ss-bg-color: #1f2937;
+    --ss-bg-color-secondary: #111827;
+    --ss-header-bg: #374151;
+    --ss-header-bg-hover: #4b5563;
+    --ss-row-bg: #1f2937;
+    --ss-row-bg-hover: #374151;
+    --ss-row-bg-alt: #263040;
+    
+    /* 边框色 */
+    --ss-border-color: #374151;
+    --ss-border-color-light: #4b5563;
+    --ss-border-color-dark: #1f2937;
+    
+    /* 文字色 */
+    --ss-text-color: #f3f4f6;
+    --ss-text-color-secondary: #9ca3af;
+    --ss-text-color-disabled: #6b7280;
+    --ss-header-text-color: #e5e7eb;
+    
+    /* 选区 */
+    --ss-selection-bg: rgba(59, 130, 246, 0.15);
+    --ss-selection-border: #60a5fa;
+    
+    /* 行号 */
+    --ss-row-number-bg: #263040;
+    --ss-row-number-text: #6b7280;
+    
+    /* 只读单元格 */
+    --ss-readonly-bg: #374151;
+    --ss-readonly-bg-hover: #4b5563;
+    
+    /* 滚动条 */
+    --ss-scrollbar-track: #374151;
+    --ss-scrollbar-thumb: #4b5563;
+    --ss-scrollbar-thumb-hover: #6b7280;
+  }
+}
+

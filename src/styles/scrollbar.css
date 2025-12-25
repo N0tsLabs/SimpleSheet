@@ -1,0 +1,46 @@
+/**
+ * 滚动条样式
+ */
+
+/* Webkit 浏览器滚动条 */
+.ss-scroll-container::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.ss-scroll-container::-webkit-scrollbar-track {
+  background: var(--ss-scrollbar-track);
+}
+
+.ss-scroll-container::-webkit-scrollbar-thumb {
+  background: var(--ss-scrollbar-thumb);
+  border-radius: 5px;
+  border: 2px solid var(--ss-scrollbar-track);
+  transition: background-color var(--ss-transition-fast);
+}
+
+.ss-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: var(--ss-scrollbar-thumb-hover);
+}
+
+.ss-scroll-container::-webkit-scrollbar-corner {
+  background: var(--ss-scrollbar-track);
+}
+
+/* Firefox 滚动条 */
+.ss-scroll-container {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ss-scrollbar-thumb) var(--ss-scrollbar-track);
+}
+
+/* 滚动条出现/隐藏的平滑过渡 */
+.ss-scroll-container {
+  overflow: overlay;
+}
+
+@supports not (overflow: overlay) {
+  .ss-scroll-container {
+    overflow: auto;
+  }
+}
+

@@ -1,0 +1,185 @@
+/**
+ * 动画效果
+ */
+
+/* 单元格悬停动画 */
+.ss-cell {
+  transition: 
+    background-color var(--ss-transition-fast),
+    box-shadow var(--ss-transition-fast),
+    transform var(--ss-transition-fast);
+}
+
+/* 行悬停动画 */
+.ss-row {
+  transition: background-color var(--ss-transition-fast);
+}
+
+/* 表头悬停动画 */
+.ss-header-cell {
+  transition: 
+    background-color var(--ss-transition-fast),
+    color var(--ss-transition-fast);
+}
+
+/* 选区边框动画 */
+.ss-selection-box {
+  transition: 
+    top var(--ss-transition-fast),
+    left var(--ss-transition-fast),
+    width var(--ss-transition-fast),
+    height var(--ss-transition-fast),
+    opacity var(--ss-transition-fast);
+}
+
+/* 列宽调整动画 */
+.ss-column-resizing .ss-header-cell,
+.ss-column-resizing .ss-cell {
+  transition: width var(--ss-transition-fast);
+}
+
+/* 行插入动画 */
+@keyframes ss-row-insert {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ss-row-inserted {
+  animation: ss-row-insert var(--ss-transition-normal) ease-out;
+}
+
+/* 行删除动画 */
+@keyframes ss-row-delete {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+}
+
+.ss-row-deleting {
+  animation: ss-row-delete var(--ss-transition-normal) ease-out forwards;
+}
+
+/* 单元格值变化闪烁 */
+@keyframes ss-cell-flash {
+  0% {
+    background-color: var(--ss-primary-color-light);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.ss-cell-changed {
+  animation: ss-cell-flash 0.5s ease-out;
+}
+
+/* 加载动画 */
+@keyframes ss-loading-pulse {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+.ss-loading .ss-cell {
+  animation: ss-loading-pulse 1.5s ease-in-out infinite;
+}
+
+/* 骨架屏加载 */
+@keyframes ss-skeleton-shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+}
+
+.ss-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--ss-border-color-light) 0px,
+    var(--ss-bg-color-secondary) 40px,
+    var(--ss-border-color-light) 80px
+  );
+  background-size: 200px 100%;
+  animation: ss-skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+/* 拖拽排序动画 */
+@keyframes ss-drag-bounce {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+.ss-dragging {
+  animation: ss-drag-bounce 0.3s ease;
+  box-shadow: var(--ss-shadow-lg);
+  z-index: 100;
+}
+
+/* 撤销/重做反馈动画 */
+@keyframes ss-undo-flash {
+  0% {
+    background-color: rgba(59, 130, 246, 0.3);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.ss-undo-flash {
+  animation: ss-undo-flash 0.4s ease-out;
+}
+
+/* 复制成功反馈 */
+@keyframes ss-copy-success {
+  0% {
+    box-shadow: inset 0 0 0 2px var(--ss-success-color);
+  }
+  100% {
+    box-shadow: inset 0 0 0 0 transparent;
+  }
+}
+
+.ss-copy-success {
+  animation: ss-copy-success 0.5s ease-out;
+}
+
+/* 平滑滚动 */
+.ss-scroll-container {
+  scroll-behavior: smooth;
+}
+
+/* 禁用动画（用户偏好减少动画） */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  
+  .ss-scroll-container {
+    scroll-behavior: auto;
+  }
+}
+

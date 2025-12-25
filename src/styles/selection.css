@@ -1,0 +1,105 @@
+/**
+ * 选区样式
+ */
+
+/* 选区层 */
+.ss-selection-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: var(--ss-z-selection);
+  overflow: hidden;
+}
+
+/* 选中状态的单元格 */
+.ss-cell-selected {
+  background-color: var(--ss-selection-bg) !important;
+}
+
+/* 活动单元格（当前编辑焦点）- Excel 风格：只变背景，无边框 */
+.ss-cell-active {
+  background-color: var(--ss-bg-color) !important;
+}
+
+/* 选区边框框 */
+.ss-selection-box {
+  position: absolute;
+  background-color: var(--ss-selection-bg);
+  border: 2px solid var(--ss-selection-border);
+  box-sizing: border-box;
+  pointer-events: none;
+  transition: 
+    top var(--ss-transition-fast),
+    left var(--ss-transition-fast),
+    width var(--ss-transition-fast),
+    height var(--ss-transition-fast);
+}
+
+/* 填充手柄 */
+.ss-fill-handle {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 8px;
+  height: 8px;
+  background-color: var(--ss-primary-color);
+  border: 2px solid var(--ss-bg-color);
+  border-radius: 1px;
+  cursor: crosshair;
+  pointer-events: auto;
+  transition: transform var(--ss-transition-fast);
+}
+
+.ss-fill-handle:hover {
+  transform: scale(1.2);
+}
+
+/* 正在拖拽填充时的预览 */
+.ss-fill-preview {
+  position: absolute;
+  background-color: rgba(59, 130, 246, 0.05);
+  border: 1px dashed var(--ss-primary-color);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+/* 整行选中 */
+.ss-row-selected .ss-row-number {
+  background-color: var(--ss-primary-color) !important;
+  color: white !important;
+}
+
+/* 整列选中时的表头 */
+.ss-header-cell-selected {
+  background-color: var(--ss-primary-color) !important;
+  color: white !important;
+}
+
+/* 剪切状态的单元格（虚线边框） */
+.ss-cell-cut {
+  animation: ss-cut-blink 1s infinite;
+}
+
+@keyframes ss-cut-blink {
+  0%, 100% {
+    border-style: dashed;
+    border-color: var(--ss-primary-color);
+  }
+  50% {
+    border-style: solid;
+    border-color: transparent;
+  }
+}
+
+/* 拖拽选择时的鼠标样式 */
+.ss-selecting {
+  cursor: cell !important;
+}
+
+.ss-selecting * {
+  cursor: cell !important;
+}
+
