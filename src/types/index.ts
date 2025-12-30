@@ -17,7 +17,55 @@ export interface SelectionRange {
 /**
  * 列类型
  */
-export type ColumnType = 'text' | 'number' | 'date' | 'boolean' | 'select' | 'custom';
+export type ColumnType = 
+  | 'text'      // 文本
+  | 'number'    // 数字
+  | 'date'      // 日期
+  | 'boolean'   // 布尔
+  | 'select'    // 下拉选择
+  | 'email'     // 邮箱（支持多值）
+  | 'phone'     // 手机号（支持多值）
+  | 'link'      // 链接（支持多值）
+  | 'file'      // 文件/图片
+  | 'custom';   // 自定义
+
+/**
+ * 列类型配置
+ */
+export interface ColumnTypeConfig {
+  /** 类型标识 */
+  type: ColumnType;
+  /** 显示名称 */
+  label: string;
+  /** 图标 */
+  icon: string;
+  /** 分组 */
+  group?: string;
+  /** 描述 */
+  description?: string;
+}
+
+/**
+ * 文件上传器接口
+ */
+export interface FileUploader {
+  /** 上传文件 */
+  upload(file: File): Promise<FileUploadResult>;
+}
+
+/**
+ * 文件上传结果
+ */
+export interface FileUploadResult {
+  /** 文件URL */
+  url: string;
+  /** 文件名 */
+  name?: string;
+  /** 文件大小 */
+  size?: number;
+  /** 文件类型 */
+  type?: string;
+}
 
 /**
  * 多行文本显示模式
@@ -180,6 +228,52 @@ export interface SheetOptions {
 }
 
 /**
+ * 填充方向
+ */
+export type FillDirection = 'down' | 'up' | 'right' | 'left';
+
+/**
+ * 填充事件
+ */
+export interface FillEvent {
+  sourceRange: SelectionRange;
+  targetRange: SelectionRange;
+  direction: FillDirection;
+}
+
+/**
+ * 行选择事件
+ */
+export interface RowSelectEvent {
+  row: number;
+  originalEvent: MouseEvent;
+}
+
+/**
+ * 列选择事件
+ */
+export interface ColumnSelectEvent {
+  col: number;
+  originalEvent: MouseEvent;
+}
+
+/**
+ * 列插入事件
+ */
+export interface ColumnInsertEvent {
+  index: number;
+  column: Column;
+}
+
+/**
+ * 列删除事件
+ */
+export interface ColumnDeleteEvent {
+  index: number;
+  column: Column;
+}
+
+/**
  * 事件类型映射
  */
 export interface SheetEventMap {
@@ -200,10 +294,17 @@ export interface SheetEventMap {
   'data:change': DataChangeEvent;
   'row:insert': RowEvent;
   'row:delete': RowEvent;
+  'row:select': RowSelectEvent;
   'column:resize': ColumnResizeEvent;
+  'column:insert': ColumnInsertEvent;
+  'column:delete': ColumnDeleteEvent;
+  'column:select': ColumnSelectEvent;
   
   // 选择事件
   'selection:change': SelectionEvent;
+  
+  // 填充事件
+  'fill': FillEvent;
   
   // 剪贴板事件
   'copy': ClipboardEvent;

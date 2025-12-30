@@ -4,6 +4,8 @@ import {
   SimpleSheet,
   ContextMenu,
   createDefaultMenuItems,
+  createHeaderMenuItems,
+  createRowNumberMenuItems,
   ColumnReorder,
   Sorter,
   Filter,
@@ -20,6 +22,8 @@ const sheetContainer = ref<HTMLElement | null>(null);
 // Sheet 实例
 let sheet: SimpleSheet | null = null;
 let contextMenu: ContextMenu | null = null;
+let headerMenu: ContextMenu | null = null;
+let rowNumberMenu: ContextMenu | null = null;
 let columnReorder: ColumnReorder | null = null;
 let sorter: Sorter | null = null;
 let filter: Filter | null = null;
@@ -151,7 +155,6 @@ const initSheet = async () => {
         if (ctx.position) {
           const newCol = { key: `col_${Date.now()}`, title: '新列', width: 100 };
           sheet?.insertColumn(ctx.position.col, newCol);
-          columns.value.splice(ctx.position.col, 0, newCol);
           log(`在列 ${ctx.position.col + 1} 左侧插入`);
         }
       },
@@ -159,14 +162,12 @@ const initSheet = async () => {
         if (ctx.position) {
           const newCol = { key: `col_${Date.now()}`, title: '新列', width: 100 };
           sheet?.insertColumn(ctx.position.col + 1, newCol);
-          columns.value.splice(ctx.position.col + 1, 0, newCol);
           log(`在列 ${ctx.position.col + 1} 右侧插入`);
         }
       },
       onDeleteColumn: (ctx) => {
         if (ctx.position) {
           sheet?.deleteColumn(ctx.position.col);
-          columns.value.splice(ctx.position.col, 1);
           log(`删除列 ${ctx.position.col + 1}`);
         }
       },
@@ -175,7 +176,102 @@ const initSheet = async () => {
   contextMenu.mount(document.body);
   sheet.setContextMenu(contextMenu);
 
-  // 右键菜单事件
+  // 表头右键菜单
+  headerMenu = new ContextMenu({
+    items: createHeaderMenuItems({
+      onCopy: () => { sheet?.copy(); log('复制整列'); },
+      onSortAsc: (ctx) => {
+        if (ctx.headerColIndex !== undefined) {
+          const col = columns.value[ctx.headerColIndex];
+          if (col && col.key) {
+            sorter?.sort(col.key, 'asc');
+            log(`按 ${col.title} 升序排序`);
+          }
+        }
+      },
+      onSortDesc: (ctx) => {
+        if (ctx.headerColIndex !== undefined) {
+          const col = columns.value[ctx.headerColIndex];
+          if (col && col.key) {
+            sorter?.sort(col.key, 'desc');
+            log(`按 ${col.title} 降序排序`);
+          }
+        }
+      },
+      onInsertColumnLeft: (ctx) => {
+        if (ctx.headerColIndex !== undefined) {
+          const newCol = { key: `col_${Date.now()}`, title: '新列', width: 100 };
+          sheet?.insertColumn(ctx.headerColIndex, newCol);
+          // 注意：sheet.insertColumn 会自动更新 columns 数组，不需要手动 splice
+          log(`在列 ${ctx.headerColIndex + 1} 左侧插入`);
+        }
+      },
+      onInsertColumnRight: (ctx) => {
+        if (ctx.headerColIndex !== undefined) {
+          const newCol = { key: `col_${Date.now()}`, title: '新列', width: 100 };
+          sheet?.insertColumn(ctx.headerColIndex + 1, newCol);
+          // 注意：sheet.insertColumn 会自动更新 columns 数组，不需要手动 splice
+          log(`在列 ${ctx.headerColIndex + 1} 右侧插入`);
+        }
+      },
+      onDeleteColumn: (ctx) => {
+        if (ctx.headerColIndex !== undefined) {
+          sheet?.deleteColumn(ctx.headerColIndex);
+          // 注意：sheet.deleteColumn 会自动更新 columns 数组，不需要手动 splice
+          log(`删除列 ${ctx.headerColIndex + 1}`);
+        }
+      },
+      onHideColumn: (ctx) => {
+        if (ctx.headerColIndex !== undefined) {
+          sheet?.hideColumn(ctx.headerColIndex);
+          log(`隐藏列 ${ctx.headerColIndex + 1}`);
+        }
+      },
+      onShowAllColumns: () => {
+        sheet?.showAllColumns();
+        log('显示所有隐藏列');
+      },
+    }),
+  });
+  headerMenu.mount(document.body);
+
+  // 行号右键菜单
+  rowNumberMenu = new ContextMenu({
+    items: createRowNumberMenuItems({
+      onCopy: () => { sheet?.copy(); log('复制整行'); },
+      onInsertRowAbove: (ctx) => {
+        if (ctx.rowNumberIndex !== undefined) {
+          sheet?.insertRow(ctx.rowNumberIndex);
+          log(`在第 ${ctx.rowNumberIndex + 1} 行上方插入`);
+        }
+      },
+      onInsertRowBelow: (ctx) => {
+        if (ctx.rowNumberIndex !== undefined) {
+          sheet?.insertRow(ctx.rowNumberIndex + 1);
+          log(`在第 ${ctx.rowNumberIndex + 1} 行下方插入`);
+        }
+      },
+      onDeleteRow: (ctx) => {
+        if (ctx.rowNumberIndex !== undefined) {
+          sheet?.deleteRow(ctx.rowNumberIndex);
+          log(`删除第 ${ctx.rowNumberIndex + 1} 行`);
+        }
+      },
+      onHideRow: (ctx) => {
+        if (ctx.rowNumberIndex !== undefined) {
+          sheet?.hideRow(ctx.rowNumberIndex);
+          log(`隐藏第 ${ctx.rowNumberIndex + 1} 行`);
+        }
+      },
+      onShowAllRows: () => {
+        sheet?.showAllRows();
+        log('显示所有隐藏行');
+      },
+    }),
+  });
+  rowNumberMenu.mount(document.body);
+
+  // 右键菜单事件 - 单元格
   sheet.on('cell:contextmenu', (e) => {
     const selection = sheet?.getSelection() || [];
     contextMenu?.show(e.originalEvent.clientX, e.originalEvent.clientY, {
@@ -183,7 +279,36 @@ const initSheet = async () => {
       selection,
       selectedCells: selection.length > 0 ? [selection[0].start] : [],
       originalEvent: e.originalEvent,
+      clickArea: 'cell',
     });
+  });
+
+  // 右键菜单事件 - 表头
+  sheet.on('header:contextmenu' as any, (e: any) => {
+    const selection = sheet?.getSelection() || [];
+    headerMenu?.show(e.originalEvent.clientX, e.originalEvent.clientY, {
+      position: null,
+      selection,
+      selectedCells: [],
+      originalEvent: e.originalEvent,
+      clickArea: 'header',
+      headerColIndex: e.col,
+    });
+    log(`右键表头列 ${e.col + 1}`);
+  });
+
+  // 右键菜单事件 - 行号
+  sheet.on('rowNumber:contextmenu' as any, (e: any) => {
+    const selection = sheet?.getSelection() || [];
+    rowNumberMenu?.show(e.originalEvent.clientX, e.originalEvent.clientY, {
+      position: null,
+      selection,
+      selectedCells: [],
+      originalEvent: e.originalEvent,
+      clickArea: 'rowNumber',
+      rowNumberIndex: e.row,
+    });
+    log(`右键行号 ${e.row + 1}`);
   });
 
   // 列拖拽排序
@@ -252,10 +377,14 @@ const initSheet = async () => {
 // 销毁
 const destroySheet = () => {
   contextMenu?.destroy();
+  headerMenu?.destroy();
+  rowNumberMenu?.destroy();
   columnReorder?.unmount();
   sheet?.destroy();
   sheet = null;
   contextMenu = null;
+  headerMenu = null;
+  rowNumberMenu = null;
   columnReorder = null;
   sorter = null;
   filter = null;
@@ -479,7 +608,7 @@ onUnmounted(() => {
 
     <!-- 底部提示 -->
     <footer class="tips">
-      <span>💡 提示：双击编辑 · Alt+Enter换行 · 右键菜单 · 拖拽表头排序 · Ctrl+C/V复制粘贴 · Ctrl+Z/Y撤销重做</span>
+      <span>💡 提示：双击编辑 · Alt+Enter换行 · 右键菜单 · 拖拽表头排序 · 拖拽行号排序行 · Ctrl+C/V复制粘贴 · Ctrl+Z/Y撤销重做</span>
     </footer>
   </div>
 </template>

@@ -15,3 +15,9 @@ export { CheckboxRenderer } from './CheckboxRenderer';
 export { SelectRenderer } from './SelectRenderer';
 export { ButtonRenderer } from './ButtonRenderer';
 
+// 新增渲染器
+export { EmailRenderer } from './EmailRenderer';
+export { PhoneRenderer } from './PhoneRenderer';
+export { MultiLinkRenderer } from './MultiLinkRenderer';
+export { FileRenderer } from './FileRenderer';
+

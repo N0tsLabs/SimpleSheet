@@ -189,3 +189,165 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ========================================
+   邮箱渲染器样式
+   ======================================== */
+
+.ss-cell-emails {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.ss-cell-email {
+  color: var(--ss-primary-color, #3b82f6);
+  text-decoration: none;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.ss-cell-email:hover {
+  text-decoration: underline;
+}
+
+.ss-cell-email-separator {
+  color: var(--ss-secondary-color, #6b7280);
+  font-size: 12px;
+}
+
+/* ========================================
+   手机号渲染器样式
+   ======================================== */
+
+.ss-cell-phones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.ss-cell-phone {
+  color: var(--ss-primary-color, #3b82f6);
+  text-decoration: none;
+  font-size: 13px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.ss-cell-phone:hover {
+  text-decoration: underline;
+}
+
+.ss-cell-phone-separator {
+  color: var(--ss-secondary-color, #6b7280);
+  font-size: 12px;
+}
+
+/* ========================================
+   多链接渲染器样式
+   ======================================== */
+
+.ss-cell-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.ss-cell-link-separator {
+  color: var(--ss-secondary-color, #6b7280);
+  font-size: 12px;
+}
+
+/* ========================================
+   文件渲染器样式
+   ======================================== */
+
+.ss-cell-files {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.ss-cell-file-img-wrapper {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.ss-cell-file-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.ss-cell-file-img:hover {
+  transform: scale(1.1);
+}
+
+.ss-cell-file-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--ss-header-bg, #f9fafb);
+  border-radius: 4px;
+  text-decoration: none;
+  color: var(--ss-text-color, #111827);
+  font-size: 12px;
+  max-width: 120px;
+  transition: background-color 0.15s ease;
+}
+
+.ss-cell-file-link:hover {
+  background: var(--ss-hover-bg, #f3f4f6);
+}
+
+.ss-cell-file-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.ss-cell-file-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ========================================
+   多值徽章样式
+   ======================================== */
+
+.ss-cell-multi-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  background: var(--ss-primary-color, #3b82f6);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 9px;
+  flex-shrink: 0;
+  cursor: help;
+}
+

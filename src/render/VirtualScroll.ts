@@ -261,6 +261,20 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
   }
 
   /**
+   * 获取当前滚动位置（垂直）
+   */
+  getScrollTop(): number {
+    return this.scrollContainer?.scrollTop ?? 0;
+  }
+
+  /**
+   * 获取当前滚动位置（水平）
+   */
+  getScrollLeft(): number {
+    return this.scrollContainer?.scrollLeft ?? 0;
+  }
+
+  /**
    * 处理滚动事件
    */
   private handleScroll(): void {

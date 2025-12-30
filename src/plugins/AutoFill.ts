@@ -8,10 +8,13 @@ import type { CellPosition, SelectionRange } from '../types';
 import { createElement, addEvent, setStyles } from '../utils/dom';
 import { normalizeRange } from '../utils/helpers';
 
+/** 填充模式 */
+export type FillMode = 'copy' | 'series' | 'formatOnly' | 'noFormat';
+
 interface AutoFillEvents {
   'fill:start': { range: SelectionRange };
   'fill:move': { targetRange: SelectionRange };
-  'fill:end': { sourceRange: SelectionRange; targetRange: SelectionRange; direction: FillDirection };
+  'fill:end': { sourceRange: SelectionRange; targetRange: SelectionRange; direction: FillDirection; mode: FillMode };
 }
 
 type FillDirection = 'down' | 'up' | 'right' | 'left';
@@ -38,9 +41,17 @@ export class AutoFill extends EventEmitter<AutoFillEvents> {
   private options: AutoFillOptions;
   private handle: HTMLElement | null = null;
   private preview: HTMLElement | null = null;
+  private optionsMenu: HTMLElement | null = null;
   private isDragging = false;
   private sourceRange: SelectionRange | null = null;
   private targetEnd: CellPosition | null = null;
+  private lastFillInfo: {
+    source: SelectionRange;
+    target: SelectionRange;
+    direction: FillDirection;
+    originalValues: any[][];
+  } | null = null;
+  private currentMode: FillMode = 'copy';
   private cleanupFns: Array<() => void> = [];
 
   constructor(options: AutoFillOptions) {
@@ -64,6 +75,30 @@ export class AutoFill extends EventEmitter<AutoFillEvents> {
     this.preview.style.display = 'none';
     selectionLayer.appendChild(this.preview);
 
+    // 创建填充选项菜单
+    this.optionsMenu = createElement('div', 'ss-fill-options-menu');
+    this.optionsMenu.style.display = 'none';
+    this.optionsMenu.innerHTML = `
+      <div class="ss-fill-option" data-mode="copy">
+        <span class="ss-fill-option-icon">📋</span>
+        <span>复制单元格</span>
+      </div>
+      <div class="ss-fill-option" data-mode="series">
+        <span class="ss-fill-option-icon">🔢</span>
+        <span>填充序列</span>
+      </div>
+      <div class="ss-fill-option-divider"></div>
+      <div class="ss-fill-option" data-mode="formatOnly">
+        <span class="ss-fill-option-icon">🎨</span>
+        <span>仅填充格式</span>
+      </div>
+      <div class="ss-fill-option" data-mode="noFormat">
+        <span class="ss-fill-option-icon">📝</span>
+        <span>不带格式填充</span>
+      </div>
+    `;
+    document.body.appendChild(this.optionsMenu);
+
     // 监听手柄拖拽
     this.cleanupFns.push(
       addEvent(this.handle, 'mousedown', this.handleMouseDown.bind(this) as EventListener)
@@ -73,6 +108,16 @@ export class AutoFill extends EventEmitter<AutoFillEvents> {
     this.cleanupFns.push(
       addEvent(document, 'mousemove', this.handleMouseMove.bind(this) as EventListener),
       addEvent(document, 'mouseup', this.handleMouseUp.bind(this) as EventListener)
+    );
+
+    // 监听选项菜单点击
+    this.cleanupFns.push(
+      addEvent(this.optionsMenu, 'click', this.handleOptionClick.bind(this) as EventListener)
+    );
+
+    // 点击其他地方关闭菜单
+    this.cleanupFns.push(
+      addEvent(document, 'mousedown', this.handleDocumentClick.bind(this) as EventListener)
     );
   }
 
@@ -84,8 +129,10 @@ export class AutoFill extends EventEmitter<AutoFillEvents> {
     this.cleanupFns = [];
     this.handle?.remove();
     this.preview?.remove();
+    this.optionsMenu?.remove();
     this.handle = null;
     this.preview = null;
+    this.optionsMenu = null;
     this.container = null;
   }
 
@@ -110,10 +157,18 @@ export class AutoFill extends EventEmitter<AutoFillEvents> {
 
     const containerRect = this.container.getBoundingClientRect();
     
+    // 计算手柄在容器内的位置（相对于容器）
+    // cellRect 是视口坐标，需要转换为相对于容器的坐标
+    const handleSize = 10;
+    const handleOffset = handleSize / 2;
+    
+    const left = cellRect.right - containerRect.left - handleOffset;
+    const top = cellRect.bottom - containerRect.top - handleOffset;
+    
     setStyles(this.handle, {
       display: 'block',
-      left: `${cellRect.right - containerRect.left - 4}px`,
-      top: `${cellRect.bottom - containerRect.top - 4}px`,
+      left: `${left}px`,
+      top: `${top}px`,
     });
   }
 
@@ -124,6 +179,14 @@ export class AutoFill extends EventEmitter<AutoFillEvents> {
     if (this.handle) {
       this.handle.style.display = 'none';
     }
+  }
+
+  /**
+   * 更新边界
+   */
+  updateBounds(maxRow: number, maxCol: number): void {
+    this.options.maxRow = maxRow;
+    this.options.maxCol = maxCol;
   }
 
   /**
@@ -173,7 +236,7 @@ export class AutoFill extends EventEmitter<AutoFillEvents> {
   /**
    * 处理鼠标释放
    */
-  private handleMouseUp(): void {
+  private handleMouseUp(e: MouseEvent): void {
     if (!this.isDragging || !this.sourceRange || !this.targetEnd) {
       this.isDragging = false;
       this.hidePreview();
@@ -187,12 +250,29 @@ export class AutoFill extends EventEmitter<AutoFillEvents> {
     if (targetRange) {
       const direction = this.getDirection(normalized, this.targetEnd);
       if (direction) {
-        this.performFill(normalized, targetRange, direction);
+        // 保存原始值用于切换填充模式
+        this.saveOriginalValues(targetRange);
+        
+        // 保存填充信息
+        this.lastFillInfo = {
+          source: normalized,
+          target: targetRange,
+          direction,
+          originalValues: this.getTargetValues(targetRange),
+        };
+        
+        // 默认使用复制填充
+        this.currentMode = 'copy';
+        this.performFill(normalized, targetRange, direction, 'copy');
+        
+        // 显示选项菜单
+        this.showOptionsMenu(e.clientX, e.clientY);
         
         this.emit('fill:end', {
           sourceRange: normalized,
           targetRange,
           direction,
+          mode: 'copy',
         });
       }
     }
@@ -202,6 +282,143 @@ export class AutoFill extends EventEmitter<AutoFillEvents> {
     this.targetEnd = null;
     this.hidePreview();
     document.body.classList.remove('ss-filling');
+  }
+
+  /**
+   * 获取目标区域的值
+   */
+  private getTargetValues(range: SelectionRange): any[][] {
+    const normalized = normalizeRange(range);
+    const values: any[][] = [];
+    for (let row = normalized.start.row; row <= normalized.end.row; row++) {
+      const rowValues: any[] = [];
+      for (let col = normalized.start.col; col <= normalized.end.col; col++) {
+        rowValues.push(this.options.getCellValue(row, col));
+      }
+      values.push(rowValues);
+    }
+    return values;
+  }
+
+  /**
+   * 保存原始值
+   */
+  private saveOriginalValues(range: SelectionRange): void {
+    if (this.lastFillInfo) {
+      this.lastFillInfo.originalValues = this.getTargetValues(range);
+    }
+  }
+
+  /**
+   * 显示选项菜单
+   */
+  private showOptionsMenu(x: number, y: number): void {
+    if (!this.optionsMenu) return;
+    
+    setStyles(this.optionsMenu, {
+      display: 'block',
+      left: `${x}px`,
+      top: `${y}px`,
+    });
+    
+    // 确保菜单不超出视口
+    const rect = this.optionsMenu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) {
+      this.optionsMenu.style.left = `${x - rect.width}px`;
+    }
+    if (rect.bottom > window.innerHeight) {
+      this.optionsMenu.style.top = `${y - rect.height}px`;
+    }
+    
+    // 高亮当前选中的模式
+    this.updateMenuHighlight();
+  }
+
+  /**
+   * 隐藏选项菜单
+   */
+  private hideOptionsMenu(): void {
+    if (this.optionsMenu) {
+      this.optionsMenu.style.display = 'none';
+    }
+  }
+
+  /**
+   * 更新菜单高亮
+   */
+  private updateMenuHighlight(): void {
+    if (!this.optionsMenu) return;
+    
+    const options = this.optionsMenu.querySelectorAll('.ss-fill-option');
+    options.forEach(opt => {
+      const mode = (opt as HTMLElement).dataset.mode;
+      opt.classList.toggle('ss-fill-option-active', mode === this.currentMode);
+    });
+  }
+
+  /**
+   * 处理选项点击
+   */
+  private handleOptionClick(e: MouseEvent): void {
+    const target = (e.target as HTMLElement).closest('.ss-fill-option');
+    if (!target) return;
+    
+    const mode = (target as HTMLElement).dataset.mode as FillMode;
+    if (!mode || !this.lastFillInfo) return;
+    
+    // 如果模式改变了，重新执行填充
+    if (mode !== this.currentMode) {
+      this.currentMode = mode;
+      
+      // 先恢复原始值
+      this.restoreOriginalValues();
+      
+      // 再用新模式填充
+      this.performFill(
+        this.lastFillInfo.source,
+        this.lastFillInfo.target,
+        this.lastFillInfo.direction,
+        mode
+      );
+      
+      this.updateMenuHighlight();
+    }
+    
+    this.hideOptionsMenu();
+  }
+
+  /**
+   * 恢复原始值
+   */
+  private restoreOriginalValues(): void {
+    if (!this.lastFillInfo) return;
+    
+    const { target, originalValues } = this.lastFillInfo;
+    const normalized = normalizeRange(target);
+    
+    for (let row = normalized.start.row; row <= normalized.end.row; row++) {
+      for (let col = normalized.start.col; col <= normalized.end.col; col++) {
+        const rowIdx = row - normalized.start.row;
+        const colIdx = col - normalized.start.col;
+        if (originalValues[rowIdx] && originalValues[rowIdx][colIdx] !== undefined) {
+          this.options.setCellValue(row, col, originalValues[rowIdx][colIdx]);
+        }
+      }
+    }
+  }
+
+  /**
+   * 处理文档点击（关闭菜单）
+   */
+  private handleDocumentClick(e: MouseEvent): void {
+    if (!this.optionsMenu) return;
+    
+    const target = e.target as HTMLElement;
+    if (!this.optionsMenu.contains(target) && this.optionsMenu.style.display === 'block') {
+      // 点击菜单外部，关闭菜单并清除填充信息
+      this.hideOptionsMenu();
+      this.lastFillInfo = null;
+    }
   }
 
   /**
@@ -257,9 +474,40 @@ export class AutoFill extends EventEmitter<AutoFillEvents> {
   }
 
   /**
+   * 检测数字序列的步长
+   */
+  private detectStep(values: any[]): number | null {
+    if (values.length < 2) return null;
+    
+    // 检查是否都是数字
+    const nums = values.map(v => {
+      if (typeof v === 'number') return v;
+      if (typeof v === 'string') {
+        const n = parseFloat(v);
+        if (!isNaN(n)) return n;
+      }
+      return null;
+    });
+    
+    if (nums.some(n => n === null)) return null;
+    
+    // 计算步长
+    const step = (nums[1] as number) - (nums[0] as number);
+    
+    // 验证步长是否一致
+    for (let i = 2; i < nums.length; i++) {
+      if ((nums[i] as number) - (nums[i - 1] as number) !== step) {
+        return null;
+      }
+    }
+    
+    return step;
+  }
+
+  /**
    * 执行填充
    */
-  private performFill(source: SelectionRange, target: SelectionRange, direction: FillDirection): void {
+  private performFill(source: SelectionRange, target: SelectionRange, direction: FillDirection, mode: FillMode = 'copy'): void {
     const sourceValues: any[][] = [];
     
     // 获取源数据
@@ -273,34 +521,137 @@ export class AutoFill extends EventEmitter<AutoFillEvents> {
 
     const normalizedTarget = normalizeRange(target);
     
-    // 根据方向填充
+    // 根据填充模式执行不同逻辑
+    switch (mode) {
+      case 'copy':
+        this.fillCopy(sourceValues, normalizedTarget, direction);
+        break;
+      case 'series':
+        this.fillSeries(sourceValues, source, normalizedTarget, direction);
+        break;
+      case 'formatOnly':
+        // 仅填充格式（目前简化处理，清空值）
+        this.fillFormatOnly(normalizedTarget);
+        break;
+      case 'noFormat':
+        // 不带格式填充（目前与复制相同）
+        this.fillCopy(sourceValues, normalizedTarget, direction);
+        break;
+    }
+  }
+
+  /**
+   * 复制填充（默认模式）
+   */
+  private fillCopy(sourceValues: any[][], target: SelectionRange, direction: FillDirection): void {
+    const sourceRows = sourceValues.length;
+    const sourceCols = sourceValues[0]?.length || 0;
+    
     if (direction === 'down' || direction === 'up') {
-      const sourceRows = sourceValues.length;
-      for (let row = normalizedTarget.start.row; row <= normalizedTarget.end.row; row++) {
-        const sourceRowIndex = (row - normalizedTarget.start.row) % sourceRows;
-        for (let col = normalizedTarget.start.col; col <= normalizedTarget.end.col; col++) {
-          const sourceColIndex = col - normalizedTarget.start.col;
-          const value = this.smartFill(
-            sourceValues[sourceRowIndex][sourceColIndex],
-            row - source.start.row,
-            direction
-          );
-          this.options.setCellValue(row, col, value);
+      for (let row = target.start.row; row <= target.end.row; row++) {
+        const sourceRowIndex = (row - target.start.row) % sourceRows;
+        for (let col = target.start.col; col <= target.end.col; col++) {
+          const sourceColIndex = col - target.start.col;
+          this.options.setCellValue(row, col, sourceValues[sourceRowIndex][sourceColIndex]);
         }
       }
     } else {
-      const sourceCols = sourceValues[0].length;
-      for (let col = normalizedTarget.start.col; col <= normalizedTarget.end.col; col++) {
-        const sourceColIndex = (col - normalizedTarget.start.col) % sourceCols;
-        for (let row = normalizedTarget.start.row; row <= normalizedTarget.end.row; row++) {
-          const sourceRowIndex = row - normalizedTarget.start.row;
-          const value = this.smartFill(
-            sourceValues[sourceRowIndex][sourceColIndex],
-            col - source.start.col,
-            direction
-          );
-          this.options.setCellValue(row, col, value);
+      for (let col = target.start.col; col <= target.end.col; col++) {
+        const sourceColIndex = (col - target.start.col) % sourceCols;
+        for (let row = target.start.row; row <= target.end.row; row++) {
+          const sourceRowIndex = row - target.start.row;
+          this.options.setCellValue(row, col, sourceValues[sourceRowIndex][sourceColIndex]);
         }
+      }
+    }
+  }
+
+  /**
+   * 序列填充
+   */
+  private fillSeries(sourceValues: any[][], source: SelectionRange, target: SelectionRange, direction: FillDirection): void {
+    const sourceRows = sourceValues.length;
+    const sourceCols = sourceValues[0]?.length || 0;
+    
+    if (direction === 'down' || direction === 'up') {
+      // 检测每一列的序列步长
+      const colSteps: (number | null)[] = [];
+      for (let col = 0; col < sourceCols; col++) {
+        const colValues = sourceValues.map(row => row[col]);
+        colSteps.push(this.detectStep(colValues));
+      }
+      
+      for (let row = target.start.row; row <= target.end.row; row++) {
+        for (let col = target.start.col; col <= target.end.col; col++) {
+          const sourceColIndex = col - target.start.col;
+          const step = colSteps[sourceColIndex];
+          
+          if (step !== null && sourceRows >= 2) {
+            // 有序列模式，按步长递增
+            const baseValue = sourceValues[sourceRows - 1][sourceColIndex];
+            const offset = row - source.end.row;
+            const delta = direction === 'down' ? offset : -offset;
+            if (typeof baseValue === 'number') {
+              this.options.setCellValue(row, col, baseValue + delta * step);
+            } else {
+              this.options.setCellValue(row, col, baseValue);
+            }
+          } else {
+            // 无序列模式，使用智能填充
+            const sourceRowIndex = (row - target.start.row) % sourceRows;
+            const value = this.smartFill(
+              sourceValues[sourceRowIndex][sourceColIndex],
+              row - source.start.row,
+              direction
+            );
+            this.options.setCellValue(row, col, value);
+          }
+        }
+      }
+    } else {
+      // 检测每一行的序列步长
+      const rowSteps: (number | null)[] = [];
+      for (let row = 0; row < sourceRows; row++) {
+        rowSteps.push(this.detectStep(sourceValues[row]));
+      }
+      
+      for (let col = target.start.col; col <= target.end.col; col++) {
+        for (let row = target.start.row; row <= target.end.row; row++) {
+          const sourceRowIndex = row - target.start.row;
+          const step = rowSteps[sourceRowIndex];
+          
+          if (step !== null && sourceCols >= 2) {
+            // 有序列模式，按步长递增
+            const baseValue = sourceValues[sourceRowIndex][sourceCols - 1];
+            const offset = col - source.end.col;
+            const delta = direction === 'right' ? offset : -offset;
+            if (typeof baseValue === 'number') {
+              this.options.setCellValue(row, col, baseValue + delta * step);
+            } else {
+              this.options.setCellValue(row, col, baseValue);
+            }
+          } else {
+            // 无序列模式，使用智能填充
+            const sourceColIndex = (col - target.start.col) % sourceCols;
+            const value = this.smartFill(
+              sourceValues[sourceRowIndex][sourceColIndex],
+              col - source.start.col,
+              direction
+            );
+            this.options.setCellValue(row, col, value);
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * 仅填充格式（清空值）
+   */
+  private fillFormatOnly(target: SelectionRange): void {
+    for (let row = target.start.row; row <= target.end.row; row++) {
+      for (let col = target.start.col; col <= target.end.col; col++) {
+        this.options.setCellValue(row, col, null);
       }
     }
   }
@@ -313,6 +664,30 @@ export class AutoFill extends EventEmitter<AutoFillEvents> {
     if (typeof value === 'number') {
       const delta = direction === 'down' || direction === 'right' ? 1 : -1;
       return value + (offset + 1) * delta;
+    }
+    
+    // 字符串中包含数字的情况，尝试递增数字部分
+    if (typeof value === 'string') {
+      // 匹配末尾的数字，如 "Item1" -> "Item2"
+      const match = value.match(/^(.*?)(\d+)(\D*)$/);
+      if (match) {
+        const prefix = match[1];
+        const num = parseInt(match[2], 10);
+        const suffix = match[3];
+        const delta = direction === 'down' || direction === 'right' ? 1 : -1;
+        const newNum = num + (offset + 1) * delta;
+        // 保持原始数字的位数（补零）
+        const numStr = newNum.toString().padStart(match[2].length, '0');
+        return prefix + numStr + suffix;
+      }
+    }
+    
+    // 日期类型
+    if (value instanceof Date) {
+      const delta = direction === 'down' || direction === 'right' ? 1 : -1;
+      const newDate = new Date(value);
+      newDate.setDate(newDate.getDate() + (offset + 1) * delta);
+      return newDate;
     }
     
     // 其他类型直接复制

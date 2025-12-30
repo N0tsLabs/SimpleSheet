@@ -35,6 +35,12 @@ export interface MenuContext {
   selectedCells: CellPosition[];
   /** 原始鼠标事件 */
   originalEvent: MouseEvent;
+  /** 点击区域类型 */
+  clickArea?: 'cell' | 'header' | 'rowNumber' | 'corner';
+  /** 如果点击表头，包含列索引 */
+  headerColIndex?: number;
+  /** 如果点击行号，包含行索引 */
+  rowNumberIndex?: number;
 }
 
 interface ContextMenuOptions {
@@ -382,6 +388,14 @@ export function createDefaultMenuItems(handlers: {
   onInsertColumnRight?: (context: MenuContext) => void;
   onDeleteColumn?: (context: MenuContext) => void;
   onClearContent?: (context: MenuContext) => void;
+  onCopyColumn?: (context: MenuContext) => void;
+  onCopyRow?: (context: MenuContext) => void;
+  onHideColumn?: (context: MenuContext) => void;
+  onShowAllColumns?: (context: MenuContext) => void;
+  onHideRow?: (context: MenuContext) => void;
+  onShowAllRows?: (context: MenuContext) => void;
+  onSortAsc?: (context: MenuContext) => void;
+  onSortDesc?: (context: MenuContext) => void;
 }): MenuItem[] {
   return [
     {
@@ -460,6 +474,129 @@ export function createDefaultMenuItems(handlers: {
       icon: '🧹',
       shortcut: 'Delete',
       action: (context) => handlers.onClearContent?.(context),
+    },
+  ];
+}
+
+/**
+ * 创建表头专用菜单项
+ */
+export function createHeaderMenuItems(handlers: {
+  onCopy?: (context: MenuContext) => void;
+  onInsertColumnLeft?: (context: MenuContext) => void;
+  onInsertColumnRight?: (context: MenuContext) => void;
+  onDeleteColumn?: (context: MenuContext) => void;
+  onHideColumn?: (context: MenuContext) => void;
+  onShowAllColumns?: (context: MenuContext) => void;
+  onSortAsc?: (context: MenuContext) => void;
+  onSortDesc?: (context: MenuContext) => void;
+}): MenuItem[] {
+  return [
+    {
+      key: 'copyColumn',
+      label: '复制整列',
+      icon: '📋',
+      action: (context) => handlers.onCopy?.(context),
+    },
+    { type: 'divider', label: '' },
+    {
+      key: 'sortAsc',
+      label: '升序排序',
+      icon: '↑',
+      action: (context) => handlers.onSortAsc?.(context),
+    },
+    {
+      key: 'sortDesc',
+      label: '降序排序',
+      icon: '↓',
+      action: (context) => handlers.onSortDesc?.(context),
+    },
+    { type: 'divider', label: '' },
+    {
+      key: 'insertColumnLeft',
+      label: '在左侧插入列',
+      icon: '⬅️',
+      action: (context) => handlers.onInsertColumnLeft?.(context),
+    },
+    {
+      key: 'insertColumnRight',
+      label: '在右侧插入列',
+      icon: '➡️',
+      action: (context) => handlers.onInsertColumnRight?.(context),
+    },
+    { type: 'divider', label: '' },
+    {
+      key: 'hideColumn',
+      label: '隐藏列',
+      icon: '👁️‍🗨️',
+      action: (context) => handlers.onHideColumn?.(context),
+    },
+    {
+      key: 'showAllColumns',
+      label: '显示所有隐藏列',
+      icon: '👁️',
+      action: (context) => handlers.onShowAllColumns?.(context),
+    },
+    { type: 'divider', label: '' },
+    {
+      key: 'deleteColumn',
+      label: '删除列',
+      icon: '🗑️',
+      action: (context) => handlers.onDeleteColumn?.(context),
+    },
+  ];
+}
+
+/**
+ * 创建行号专用菜单项
+ */
+export function createRowNumberMenuItems(handlers: {
+  onCopy?: (context: MenuContext) => void;
+  onInsertRowAbove?: (context: MenuContext) => void;
+  onInsertRowBelow?: (context: MenuContext) => void;
+  onDeleteRow?: (context: MenuContext) => void;
+  onHideRow?: (context: MenuContext) => void;
+  onShowAllRows?: (context: MenuContext) => void;
+}): MenuItem[] {
+  return [
+    {
+      key: 'copyRow',
+      label: '复制整行',
+      icon: '📋',
+      action: (context) => handlers.onCopy?.(context),
+    },
+    { type: 'divider', label: '' },
+    {
+      key: 'insertRowAbove',
+      label: '在上方插入行',
+      icon: '⬆️',
+      action: (context) => handlers.onInsertRowAbove?.(context),
+    },
+    {
+      key: 'insertRowBelow',
+      label: '在下方插入行',
+      icon: '⬇️',
+      action: (context) => handlers.onInsertRowBelow?.(context),
+    },
+    { type: 'divider', label: '' },
+    {
+      key: 'hideRow',
+      label: '隐藏行',
+      icon: '👁️‍🗨️',
+      action: (context) => handlers.onHideRow?.(context),
+    },
+    {
+      key: 'showAllRows',
+      label: '显示所有隐藏行',
+      icon: '👁️',
+      action: (context) => handlers.onShowAllRows?.(context),
+    },
+    { type: 'divider', label: '' },
+    {
+      key: 'deleteRow',
+      label: '删除行',
+      icon: '🗑️',
+      action: (context) => handlers.onDeleteRow?.(context),
     },
   ];
 }

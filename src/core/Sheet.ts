@@ -11,7 +11,11 @@ import { KeyboardManager } from './KeyboardManager';
 import { ClipboardManager } from './ClipboardManager';
 import { Renderer } from '../render/Renderer';
 import { EditorManager } from '../editors/EditorManager';
+import { AutoFill } from '../plugins/AutoFill';
+import { RowReorder } from '../plugins/RowReorder';
+import { FilePasteHandler } from '../plugins/FilePasteHandler';
 import type {
+  FileUploader,
   SheetOptions,
   SheetEventMap,
   Column,
@@ -57,6 +61,9 @@ export class Sheet extends EventEmitter<SheetEventMap> {
   private clipboardManager: ClipboardManager;
   private editorManager: EditorManager;
   private renderer: Renderer;
+  private autoFill: AutoFill;
+  private rowReorder: RowReorder;
+  private filePasteHandler: FilePasteHandler;
   
   private cleanupFns: Array<() => void> = [];
   private isDestroyed = false;
@@ -102,6 +109,38 @@ export class Sheet extends EventEmitter<SheetEventMap> {
       showRowNumber: this.options.showRowNumber,
       rowNumberWidth: this.options.rowNumberWidth,
       virtualScrollBuffer: this.options.virtualScrollBuffer,
+    });
+    
+    // 初始化自动填充插件
+    this.autoFill = new AutoFill({
+      getCellValue: (row, col) => this.dataModel.getCellValue(row, col),
+      setCellValue: (row, col, value) => this.dataModel.setCellValue(row, col, value),
+      getCellRect: (row, col) => this.renderer.getCellRect(row, col),
+      getCellFromPoint: (x, y) => this.renderer.getCellFromPoint(x, y),
+      getSelection: () => this.selectionManager.getPrimaryRange(),
+      maxRow: this.dataModel.getRowCount() || 1,
+      maxCol: this.dataModel.getColumnCount(),
+    });
+    
+    // 初始化行拖拽排序插件
+    this.rowReorder = new RowReorder({
+      getData: () => this.dataModel.getData(),
+      moveRow: (from, to) => this.moveRow(from, to),
+      getRowHeight: () => this.options.rowHeight,
+      getHeaderHeight: () => this.options.headerHeight,
+      rowNumberWidth: this.options.rowNumberWidth,
+      getScrollTop: () => this.renderer.getVirtualScroll().getScrollTop(),
+    });
+    
+    // 初始化文件粘贴处理器
+    this.filePasteHandler = new FilePasteHandler({
+      getActiveCell: () => this.selectionManager.getActiveCell(),
+      getColumnType: (col) => this.options.columns[col]?.type,
+      setCellValue: (row, col, value) => {
+        this.dataModel.setCellValue(row, col, value);
+        this.renderer.refreshCell(row, col);
+      },
+      getCellValue: (row, col) => this.dataModel.getCellValue(row, col),
     });
     
     // 设置
@@ -151,6 +190,22 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     if (root) {
       root.tabIndex = 0;
       this.keyboardManager.attach(root);
+    }
+    
+    // 挂载自动填充插件
+    const selectionLayer = this.renderer.getSelectionLayer();
+    if (root && selectionLayer) {
+      this.autoFill.mount(root, selectionLayer);
+    }
+    
+    // 挂载行拖拽排序插件
+    if (root) {
+      this.rowReorder.mount(root);
+    }
+    
+    // 挂载文件粘贴处理器
+    if (root) {
+      this.filePasteHandler.mount(root);
     }
     
     // 绑定事件
@@ -227,13 +282,72 @@ export class Sheet extends EventEmitter<SheetEventMap> {
       this.renderer.updateSelection(event.cells, this.selectionManager.getActiveCell());
       this.emit('selection:change', event);
       
+      // 更新填充手柄位置
+      const primaryRange = this.selectionManager.getPrimaryRange();
+      if (!this.options.readonly && primaryRange) {
+        this.autoFill.updateHandlePosition(primaryRange);
+      } else {
+        this.autoFill.hideHandle();
+      }
+      
       // 处理多行文本展开显示
       this.handleCellExpand(event.cells);
+    });
+    
+    // 自动填充事件
+    this.autoFill.on('fill:start', () => {
+      // 开始填充时，记录历史批次
+      this.historyManager.startBatch();
+    });
+    
+    this.autoFill.on('fill:end', ({ sourceRange, targetRange, direction, mode }) => {
+      // 填充完成，结束历史批次
+      this.historyManager.endBatch();
+      
+      // 更新选区到包含源和目标的完整范围
+      const normalized = normalizeRange(sourceRange);
+      const targetNormalized = normalizeRange(targetRange);
+      
+      let newStartRow = Math.min(normalized.start.row, targetNormalized.start.row);
+      let newEndRow = Math.max(normalized.end.row, targetNormalized.end.row);
+      let newStartCol = Math.min(normalized.start.col, targetNormalized.start.col);
+      let newEndCol = Math.max(normalized.end.col, targetNormalized.end.col);
+      
+      this.selectionManager.selectRange(newStartRow, newStartCol, newEndRow, newEndCol);
+      
+      // 重新渲染
+      this.renderer.render();
+      
+      // 触发填充事件
+      this.emit('fill', {
+        sourceRange: normalized,
+        targetRange: targetNormalized,
+        direction,
+      });
     });
     
     // 编辑器事件
     this.editorManager.on('end', (event) => {
       this.emit('edit:end', event);
+    });
+    
+    // 滚动时更新填充手柄位置
+    this.renderer.getVirtualScroll().on('scroll', () => {
+      const primaryRange = this.selectionManager.getPrimaryRange();
+      if (!this.options.readonly && primaryRange) {
+        this.autoFill.updateHandlePosition(primaryRange);
+      }
+    });
+    
+    // 行拖拽排序事件
+    this.rowReorder.on('reorder:end', ({ fromIndex, toIndex }) => {
+      this.emit('row:reorder' as any, { fromIndex, toIndex });
+      this.renderer.render();
+    });
+    
+    // 文件粘贴事件
+    this.filePasteHandler.on('paste:complete', ({ file, result, row, col }) => {
+      this.emit('file:paste' as any, { file, result, row, col });
     });
   }
 
@@ -411,6 +525,48 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     const root = this.renderer.getRoot();
     if (!root) return;
     
+    const target = e.target as HTMLElement;
+    
+    // 检查是否点击了表头
+    const headerCell = target.closest('.ss-header-cell:not(.ss-corner-cell):not(.ss-row-number-header)') as HTMLElement;
+    if (headerCell) {
+      const colIndex = parseInt(headerCell.getAttribute('data-col') || '-1', 10);
+      if (colIndex >= 0) {
+        // 选中整列
+        const maxRow = this.dataModel.getRowCount() - 1;
+        this.selectionManager.selectRange(0, colIndex, maxRow, colIndex);
+        this.renderer.render();
+        
+        this.emit('header:contextmenu' as any, {
+          col: colIndex,
+          column: this.options.columns[colIndex],
+          originalEvent: e,
+        });
+        return;
+      }
+    }
+    
+    // 检查是否点击了行号
+    const rowNumberCell = target.closest('.ss-row-number') as HTMLElement;
+    if (rowNumberCell) {
+      const row = rowNumberCell.closest('.ss-row');
+      const rowIndex = row ? parseInt(row.getAttribute('data-row') || '-1', 10) : -1;
+      if (rowIndex >= 0) {
+        // 选中整行
+        const maxCol = this.dataModel.getColumnCount() - 1;
+        this.selectionManager.selectRange(rowIndex, 0, rowIndex, maxCol);
+        this.renderer.render();
+        
+        this.emit('rowNumber:contextmenu' as any, {
+          row: rowIndex,
+          rowData: this.dataModel.getRowData(rowIndex) || {},
+          originalEvent: e,
+        });
+        return;
+      }
+    }
+    
+    // 普通单元格
     const pos = getMousePosition(e, root);
     const cell = this.renderer.getCellFromPoint(pos.x, pos.y);
     
@@ -651,13 +807,18 @@ export class Sheet extends EventEmitter<SheetEventMap> {
           title: colLetter,
           width: 80,
         };
+        // dataModel.insertColumn 会通过 splice 直接修改共享的 columns 数组
+        // 不需要再单独 push，否则会导致列重复添加
         this.dataModel.insertColumn(newColIndex, newColumn);
-        this.options.columns.push(newColumn);
       }
     }
     
     // 更新渲染器和选区管理器的边界
     this.selectionManager.updateBounds(
+      this.dataModel.getRowCount(),
+      this.dataModel.getColumnCount()
+    );
+    this.autoFill.updateBounds(
       this.dataModel.getRowCount(),
       this.dataModel.getColumnCount()
     );
@@ -792,6 +953,9 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     // 隐藏展开浮层（立即隐藏，避免动画闪烁）
     hideExpandOverlay(true);
     
+    // 隐藏填充手柄
+    this.autoFill.hideHandle();
+    
     const cellRect = this.renderer.getCellRect(row, col);
     const root = this.renderer.getRoot();
     
@@ -862,6 +1026,10 @@ export class Sheet extends EventEmitter<SheetEventMap> {
       this.dataModel.getRowCount() || 1,
       this.dataModel.getColumnCount()
     );
+    this.autoFill.updateBounds(
+      this.dataModel.getRowCount() || 1,
+      this.dataModel.getColumnCount()
+    );
     this.renderer.updateOptions({
       rowCount: this.dataModel.getRowCount() || 1,
     });
@@ -881,6 +1049,10 @@ export class Sheet extends EventEmitter<SheetEventMap> {
   setData(data: RowData[]): void {
     this.dataModel.setData(data);
     this.selectionManager.updateBounds(
+      this.dataModel.getRowCount(),
+      this.dataModel.getColumnCount()
+    );
+    this.autoFill.updateBounds(
       this.dataModel.getRowCount(),
       this.dataModel.getColumnCount()
     );
@@ -963,6 +1135,10 @@ export class Sheet extends EventEmitter<SheetEventMap> {
       newRowCount,
       this.dataModel.getColumnCount()
     );
+    this.autoFill.updateBounds(
+      newRowCount,
+      this.dataModel.getColumnCount()
+    );
     this.renderer.updateOptions({
       rowCount: newRowCount,
     });
@@ -981,6 +1157,10 @@ export class Sheet extends EventEmitter<SheetEventMap> {
       this.dataModel.getRowCount() || 1,
       this.dataModel.getColumnCount()
     );
+    this.autoFill.updateBounds(
+      this.dataModel.getRowCount() || 1,
+      this.dataModel.getColumnCount()
+    );
     this.renderer.updateOptions({
       rowCount: this.dataModel.getRowCount() || 1,
     });
@@ -990,6 +1170,24 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     });
     
     return deleted;
+  }
+
+  /**
+   * 移动行（用于拖拽排序）
+   */
+  moveRow(fromIndex: number, toIndex: number): void {
+    if (fromIndex === toIndex) return;
+    
+    this.historyManager.startBatch();
+    
+    const data = this.dataModel.getData();
+    const [removed] = data.splice(fromIndex, 1);
+    data.splice(toIndex, 0, removed);
+    this.dataModel.setData(data);
+    
+    this.historyManager.endBatch();
+    
+    this.renderer.render();
   }
 
   /**
@@ -1052,13 +1250,22 @@ export class Sheet extends EventEmitter<SheetEventMap> {
   insertColumn(index: number, column: Column): void {
     if (!this.options.allowInsertColumn) return;
     
+    // dataModel.insertColumn 会通过 splice 直接修改 this.columns 数组
+    // 由于 dataModel.columns 和 options.columns 是同一个引用，
+    // splice 操作会同时修改两者，不需要重新赋值
     this.dataModel.insertColumn(index, column);
+    
     this.selectionManager.updateBounds(
       this.dataModel.getRowCount() || 1,
       this.dataModel.getColumnCount()
     );
+    this.autoFill.updateBounds(
+      this.dataModel.getRowCount() || 1,
+      this.dataModel.getColumnCount()
+    );
+    // 传入同一个引用，确保 VirtualScroll 和 Renderer 使用相同的列数组
     this.renderer.updateOptions({
-      columns: this.dataModel.getColumns(),
+      columns: this.options.columns,
     });
     
     this.emit('column:insert', { index, column });
@@ -1070,14 +1277,22 @@ export class Sheet extends EventEmitter<SheetEventMap> {
   deleteColumn(index: number): Column | undefined {
     if (!this.options.allowDeleteColumn) return undefined;
     
+    // dataModel.deleteColumn 会通过 splice 直接修改 this.columns 数组
+    // 由于 dataModel.columns 和 options.columns 是同一个引用，
+    // splice 操作会同时修改两者，不需要重新赋值
     const deleted = this.dataModel.deleteColumn(index);
     if (deleted) {
       this.selectionManager.updateBounds(
         this.dataModel.getRowCount() || 1,
         this.dataModel.getColumnCount()
       );
+      this.autoFill.updateBounds(
+        this.dataModel.getRowCount() || 1,
+        this.dataModel.getColumnCount()
+      );
+      // 传入同一个引用，确保 VirtualScroll 和 Renderer 使用相同的列数组
       this.renderer.updateOptions({
-        columns: this.dataModel.getColumns(),
+        columns: this.options.columns,
       });
       
       this.emit('column:delete', { index, column: deleted });
@@ -1255,6 +1470,10 @@ export class Sheet extends EventEmitter<SheetEventMap> {
       this.dataModel.getRowCount() || 1,
       columns.length
     );
+    this.autoFill.updateBounds(
+      this.dataModel.getRowCount() || 1,
+      columns.length
+    );
     this.renderer.updateOptions({ columns });
     this.renderer.render();
   }
@@ -1299,6 +1518,14 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     if (contextMenu && typeof contextMenu.setTheme === 'function') {
       contextMenu.setTheme(this.options.theme);
     }
+  }
+
+  /**
+   * 设置文件上传器
+   * @param uploader 自定义上传器，实现 FileUploader 接口
+   */
+  setFileUploader(uploader: FileUploader): void {
+    this.filePasteHandler.setUploader(uploader);
   }
 
   /**
@@ -1422,12 +1649,18 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     // 销毁各模块
     this.keyboardManager.detach();
     this.editorManager.destroy();
+    this.autoFill.unmount();
+    this.rowReorder.unmount();
+    this.filePasteHandler.unmount();
     this.renderer.destroy();
     
     // 清理事件
     this.dataModel.removeAllListeners();
     this.selectionManager.removeAllListeners();
     this.historyManager.removeAllListeners();
+    this.autoFill.removeAllListeners();
+    this.rowReorder.removeAllListeners();
+    this.filePasteHandler.removeAllListeners();
     this.removeAllListeners();
     
     // 清空容器

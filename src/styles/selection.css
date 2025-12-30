@@ -11,7 +11,7 @@
   bottom: 0;
   pointer-events: none;
   z-index: var(--ss-z-selection);
-  overflow: hidden;
+  /* 不能使用 overflow: hidden，否则会裁剪填充手柄 */
 }
 
 /* 选中状态的单元格 */
@@ -41,29 +41,129 @@
 /* 填充手柄 */
 .ss-fill-handle {
   position: absolute;
-  right: -4px;
-  bottom: -4px;
-  width: 8px;
-  height: 8px;
-  background-color: var(--ss-primary-color);
-  border: 2px solid var(--ss-bg-color);
-  border-radius: 1px;
+  width: 10px;
+  height: 10px;
+  background-color: #3b82f6;
+  border: 2px solid #ffffff;
+  border-radius: 2px;
   cursor: crosshair;
   pointer-events: auto;
-  transition: transform var(--ss-transition-fast);
+  transition: transform var(--ss-transition-fast), box-shadow var(--ss-transition-fast);
+  z-index: 100;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
 .ss-fill-handle:hover {
-  transform: scale(1.2);
+  transform: scale(1.3);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+/* 正在拖拽填充时 */
+.ss-filling {
+  cursor: crosshair !important;
+  user-select: none !important;
+}
+
+.ss-filling * {
+  cursor: crosshair !important;
+  user-select: none !important;
 }
 
 /* 正在拖拽填充时的预览 */
 .ss-fill-preview {
   position: absolute;
-  background-color: rgba(59, 130, 246, 0.05);
-  border: 1px dashed var(--ss-primary-color);
+  background-color: rgba(59, 130, 246, 0.08);
+  border: 2px dashed var(--ss-primary-color);
   box-sizing: border-box;
   pointer-events: none;
+  z-index: 5;
+  animation: ss-fill-preview-pulse 1s ease-in-out infinite;
+}
+
+@keyframes ss-fill-preview-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* 填充选项菜单 */
+.ss-fill-options-menu {
+  position: fixed;
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 4px 0;
+  min-width: 160px;
+  z-index: 10000;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.ss-fill-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  color: #333;
+  transition: background-color 0.15s;
+}
+
+.ss-fill-option:hover {
+  background-color: #f5f5f5;
+}
+
+.ss-fill-option-active {
+  background-color: #e3f2fd;
+  color: #1976d2;
+}
+
+.ss-fill-option-active:hover {
+  background-color: #bbdefb;
+}
+
+.ss-fill-option-icon {
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+}
+
+.ss-fill-option-divider {
+  height: 1px;
+  background: #e0e0e0;
+  margin: 4px 0;
+}
+
+/* 暗色主题 */
+[data-theme="dark"] .ss-fill-options-menu {
+  background: #2d2d2d;
+  border-color: #404040;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .ss-fill-option {
+  color: #e0e0e0;
+}
+
+[data-theme="dark"] .ss-fill-option:hover {
+  background-color: #3d3d3d;
+}
+
+[data-theme="dark"] .ss-fill-option-active {
+  background-color: #1e3a5f;
+  color: #64b5f6;
+}
+
+[data-theme="dark"] .ss-fill-option-active:hover {
+  background-color: #254a73;
+}
+
+[data-theme="dark"] .ss-fill-option-divider {
+  background: #404040;
 }
 
 /* 整行选中 */

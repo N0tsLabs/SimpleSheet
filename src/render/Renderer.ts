@@ -147,6 +147,13 @@ export class Renderer {
   }
 
   /**
+   * 获取选区层
+   */
+  getSelectionLayer(): HTMLElement | null {
+    return this.selectionLayer;
+  }
+
+  /**
    * 获取滚动容器
    */
   getScrollContainer(): HTMLElement | null {
@@ -489,6 +496,9 @@ export class Renderer {
     this.renderSelectionBorder(selectedCells, activeCell);
   }
 
+  /** 选区框元素缓存 */
+  private selectionBox: HTMLElement | null = null;
+
   /**
    * 渲染选区边框
    */
@@ -498,7 +508,11 @@ export class Renderer {
   ): void {
     if (!this.selectionLayer || !this.scrollContainer) return;
     
-    this.selectionLayer.innerHTML = '';
+    // 只移除选区框，保留其他元素（如填充手柄）
+    if (this.selectionBox) {
+      this.selectionBox.remove();
+      this.selectionBox = null;
+    }
     
     if (selectedCells.length === 0) return;
     
@@ -524,14 +538,14 @@ export class Renderer {
                   this.virtualScroll.getColumnOffset(minCol);
     const height = (maxRow - minRow + 1) * this.options.rowHeight;
     
-    const selectionBox = createElement('div', 'ss-selection-box');
-    setStyles(selectionBox, {
+    this.selectionBox = createElement('div', 'ss-selection-box');
+    setStyles(this.selectionBox, {
       top: `${top}px`,
       left: `${left}px`,
       width: `${width}px`,
       height: `${height}px`,
     });
-    this.selectionLayer.appendChild(selectionBox);
+    this.selectionLayer.appendChild(this.selectionBox);
   }
 
   /**
@@ -563,6 +577,8 @@ export class Renderer {
    * 更新配置
    */
   updateOptions(options: Partial<RendererOptions>): void {
+    const columnsChanged = options.columns && options.columns.length !== this.options.columns.length;
+    
     Object.assign(this.options, options);
     
     this.virtualScroll.update({
@@ -576,7 +592,25 @@ export class Renderer {
     
     this.updateContainerStyles();
     this.renderHeader();
+    
+    // 如果列数量变化，清除所有缓存并重新渲染
+    if (columnsChanged) {
+      this.clearCache();
+    }
+    
     this.render();
+  }
+
+  /**
+   * 清除行和单元格缓存
+   */
+  private clearCache(): void {
+    // 移除所有行元素
+    for (const row of this.rowCache.values()) {
+      row.remove();
+    }
+    this.rowCache.clear();
+    this.cellCache.clear();
   }
 
   /**

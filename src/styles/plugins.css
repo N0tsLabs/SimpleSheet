@@ -114,3 +114,369 @@
   cursor: default;
 }
 
+/* 行号单元格可拖拽 */
+.ss-row-number-cell,
+.ss-row-number {
+  cursor: grab;
+}
+
+.ss-row-number-cell:active,
+.ss-row-number:active {
+  cursor: grabbing;
+}
+
+/* 行拖拽排序 */
+.ss-row-dragging,
+.ss-row-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+.ss-row-drag-ghost {
+  font-family: var(--ss-font-family);
+  color: var(--ss-text-color);
+}
+
+.ss-row-drop-indicator {
+  box-shadow: 0 0 4px var(--ss-primary-color);
+}
+
+/* ========================================
+   列类型选择器样式
+   ======================================== */
+
+.ss-column-type-picker {
+  position: fixed;
+  background: var(--ss-bg-color, #fff);
+  border: 1px solid var(--ss-border-color, #e5e7eb);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  min-width: 220px;
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 10001;
+  font-family: var(--ss-font-family);
+}
+
+.ss-ctp-header {
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ss-text-color, #111827);
+  border-bottom: 1px solid var(--ss-border-color, #e5e7eb);
+}
+
+.ss-ctp-content {
+  padding: 8px 0;
+}
+
+.ss-ctp-group {
+  margin-bottom: 8px;
+}
+
+.ss-ctp-group-label {
+  padding: 4px 16px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ss-secondary-color, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ss-ctp-items {
+  padding: 0 8px;
+}
+
+.ss-ctp-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.ss-ctp-item:hover {
+  background: var(--ss-hover-bg, #f3f4f6);
+}
+
+.ss-ctp-item-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ss-header-bg, #f9fafb);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.ss-ctp-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ss-ctp-item-label {
+  font-size: 13px;
+  color: var(--ss-text-color, #111827);
+}
+
+.ss-ctp-item-desc {
+  font-size: 11px;
+  color: var(--ss-secondary-color, #6b7280);
+}
+
+/* ========================================
+   多值编辑器对话框样式
+   ======================================== */
+
+.ss-mve-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10002;
+}
+
+.ss-mve-dialog {
+  background: var(--ss-bg-color, #fff);
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  min-width: 400px;
+  max-width: 500px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--ss-font-family);
+}
+
+.ss-mve-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--ss-border-color, #e5e7eb);
+}
+
+.ss-mve-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ss-text-color, #111827);
+}
+
+.ss-mve-close {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 20px;
+  color: var(--ss-secondary-color, #6b7280);
+  transition: all 0.15s ease;
+}
+
+.ss-mve-close:hover {
+  background: var(--ss-hover-bg, #f3f4f6);
+  color: var(--ss-text-color, #111827);
+}
+
+.ss-mve-content {
+  flex: 1;
+  padding: 16px 20px;
+  overflow-y: auto;
+}
+
+.ss-mve-list {
+  min-height: 100px;
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+  border: 1px solid var(--ss-border-color, #e5e7eb);
+  border-radius: 8px;
+}
+
+.ss-mve-empty {
+  padding: 32px;
+  text-align: center;
+  color: var(--ss-secondary-color, #6b7280);
+  font-size: 13px;
+}
+
+.ss-mve-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ss-border-color, #e5e7eb);
+}
+
+.ss-mve-item:last-child {
+  border-bottom: none;
+}
+
+.ss-mve-item-input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--ss-border-color, #e5e7eb);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: var(--ss-font-family);
+  color: var(--ss-text-color, #111827);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.ss-mve-item-input:focus {
+  border-color: var(--ss-primary-color, #3b82f6);
+}
+
+.ss-mve-item-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.15s ease;
+}
+
+.ss-mve-item-btn:hover {
+  background: var(--ss-hover-bg, #f3f4f6);
+}
+
+.ss-mve-item-delete:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.ss-mve-add-area {
+  display: flex;
+  gap: 8px;
+}
+
+.ss-mve-input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--ss-border-color, #e5e7eb);
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: var(--ss-font-family);
+  color: var(--ss-text-color, #111827);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.ss-mve-input:focus {
+  border-color: var(--ss-primary-color, #3b82f6);
+}
+
+.ss-mve-add-btn {
+  padding: 10px 16px;
+  background: var(--ss-primary-color, #3b82f6);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.ss-mve-add-btn:hover {
+  background: var(--ss-primary-hover, #2563eb);
+}
+
+.ss-mve-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--ss-border-color, #e5e7eb);
+}
+
+.ss-mve-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ss-mve-btn-cancel {
+  background: var(--ss-header-bg, #f9fafb);
+  color: var(--ss-text-color, #111827);
+}
+
+.ss-mve-btn-cancel:hover {
+  background: var(--ss-hover-bg, #f3f4f6);
+}
+
+.ss-mve-btn-confirm {
+  background: var(--ss-primary-color, #3b82f6);
+  color: #fff;
+}
+
+.ss-mve-btn-confirm:hover {
+  background: var(--ss-primary-hover, #2563eb);
+}
+
+/* ========================================
+   填充选项菜单样式
+   ======================================== */
+
+.ss-fill-options-overlay {
+  position: absolute;
+  background: var(--ss-bg-color, #fff);
+  border: 1px solid var(--ss-border-color, #e5e7eb);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 140px;
+  z-index: 1000;
+  font-family: var(--ss-font-family);
+  font-size: 12px;
+}
+
+.ss-fill-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  color: var(--ss-text-color, #111827);
+}
+
+.ss-fill-option:first-child {
+  border-radius: 8px 8px 0 0;
+}
+
+.ss-fill-option:last-child {
+  border-radius: 0 0 8px 8px;
+}
+
+.ss-fill-option:hover {
+  background: var(--ss-hover-bg, #f3f4f6);
+}
+
+.ss-fill-option.active {
+  background: var(--ss-primary-color, #3b82f6);
+  color: #fff;
+}
+

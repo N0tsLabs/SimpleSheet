@@ -13,6 +13,7 @@ export type {
   SheetEventMap,
   Column,
   ColumnType,
+  ColumnTypeConfig,
   RowData,
   CellMeta,
   CellPosition,
@@ -32,6 +33,8 @@ export type {
   ClipboardEvent,
   HistoryEvent,
   WrapTextMode,
+  FileUploader,
+  FileUploadResult,
 } from './types';
 
 // 导出渲染器
@@ -45,6 +48,10 @@ export { TagRenderer } from './renderers/TagRenderer';
 export { ProgressRenderer } from './renderers/ProgressRenderer';
 export { RatingRenderer } from './renderers/RatingRenderer';
 export { CheckboxRenderer } from './renderers/CheckboxRenderer';
+export { EmailRenderer } from './renderers/EmailRenderer';
+export { PhoneRenderer } from './renderers/PhoneRenderer';
+export { MultiLinkRenderer } from './renderers/MultiLinkRenderer';
+export { FileRenderer } from './renderers/FileRenderer';
 
 // 导出编辑器
 export { BaseEditor } from './editors/BaseEditor';
@@ -54,11 +61,15 @@ export { DateEditor } from './editors/DateEditor';
 export { SelectEditor } from './editors/SelectEditor';
 
 // 导出插件
-export { ContextMenu, createDefaultMenuItems } from './plugins/ContextMenu';
+export { ContextMenu, createDefaultMenuItems, createHeaderMenuItems, createRowNumberMenuItems } from './plugins/ContextMenu';
 export type { MenuItem, MenuContext } from './plugins/ContextMenu';
 export { ColumnResizer } from './plugins/ColumnResizer';
 export { AutoFill } from './plugins/AutoFill';
 export { ColumnReorder } from './plugins/ColumnReorder';
+export { RowReorder } from './plugins/RowReorder';
+export { ColumnTypePicker, COLUMN_TYPES, createColumnByType } from './plugins/ColumnTypePicker';
+export { MultiValueEditor, showMultiValueEditor } from './plugins/MultiValueEditor';
+export { FilePasteHandler } from './plugins/FilePasteHandler';
 
 export { Validator, ValidationRules } from './plugins/Validator';
 export type { ValidationRule, ValidationResult, ValidatorType } from './plugins/Validator';
