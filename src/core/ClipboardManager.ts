@@ -6,6 +6,11 @@
 import { EventEmitter } from './EventEmitter';
 import { parseCSV, toCSV } from '../utils/helpers';
 
+interface ColumnInfo {
+  type?: string;
+  options?: Array<{ label: string; value: any }>;
+}
+
 interface ClipboardData {
   values: any[][];
   text: string;
@@ -26,9 +31,11 @@ export class ClipboardManager extends EventEmitter<ClipboardEvents> {
 
   /**
    * 复制数据
+   * @param values 要复制的数据
+   * @param columns 列信息（用于格式化特殊类型）
    */
-  async copy(values: any[][]): Promise<void> {
-    const text = toCSV(values);
+  async copy(values: any[][], columns?: ColumnInfo[]): Promise<void> {
+    const text = toCSV(values, columns);
     
     this.internalData = { values, text };
     this.isCut = false;
@@ -46,9 +53,11 @@ export class ClipboardManager extends EventEmitter<ClipboardEvents> {
 
   /**
    * 剪切数据
+   * @param values 要剪切的数据
+   * @param columns 列信息（用于格式化特殊类型）
    */
-  async cut(values: any[][]): Promise<void> {
-    const text = toCSV(values);
+  async cut(values: any[][], columns?: ColumnInfo[]): Promise<void> {
+    const text = toCSV(values, columns);
     
     this.internalData = { values, text };
     this.isCut = true;

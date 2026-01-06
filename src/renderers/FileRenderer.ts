@@ -17,8 +17,15 @@ interface FileValue {
 export class FileRenderer extends BaseRenderer {
   render(cell: HTMLElement, value: any, rowData: RowData, column: Column): void {
     cell.innerHTML = '';
+    
+    // 添加文件类型标记，用于提示可粘贴
+    cell.classList.add('ss-cell-file-type');
 
     if (value === null || value === undefined || value === '') {
+      // 显示占位提示
+      const placeholder = createElement('div', 'ss-cell-file-placeholder');
+      placeholder.innerHTML = '<span class="ss-file-placeholder-icon">📎</span><span class="ss-file-placeholder-text">点击后可粘贴文件</span>';
+      cell.appendChild(placeholder);
       return;
     }
 
@@ -50,12 +57,8 @@ export class FileRenderer extends BaseRenderer {
         img.src = file.url;
         img.alt = file.name || '图片';
         img.title = file.name || '点击查看大图';
-        
-        // 点击查看大图
-        img.addEventListener('click', (e) => {
-          e.stopPropagation();
-          this.showImagePreview(file.url);
-        });
+        // 存储图片URL到data属性，用于事件委托
+        img.setAttribute('data-preview-url', file.url);
         
         imgWrapper.appendChild(img);
         container.appendChild(imgWrapper);
@@ -127,10 +130,56 @@ export class FileRenderer extends BaseRenderer {
       return true;
     }
     
-    // 检查文件扩展名
-    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.ico'];
     const lowerUrl = url.toLowerCase();
-    return imageExtensions.some(ext => lowerUrl.includes(ext));
+    
+    // 检查文件扩展名（支持带参数的 URL）
+    const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif'];
+    
+    // 尝试解析 URL 获取路径
+    try {
+      const parsed = new URL(url);
+      const pathname = parsed.pathname.toLowerCase();
+      
+      // 检查路径中是否有图片扩展名
+      if (imageExtensions.some(ext => pathname.endsWith('.' + ext))) {
+        return true;
+      }
+      
+      // 检查路径段是否包含图片格式（如 /svg?seed=1）
+      if (imageExtensions.some(ext => pathname.includes('/' + ext) || pathname.includes('.' + ext))) {
+        return true;
+      }
+    } catch {
+      // URL 解析失败，使用简单匹配
+    }
+    
+    // 简单匹配：检查是否包含图片扩展名
+    if (imageExtensions.some(ext => 
+      lowerUrl.includes('.' + ext) || 
+      lowerUrl.includes('/' + ext + '?') ||
+      lowerUrl.includes('/' + ext + '/')
+    )) {
+      return true;
+    }
+    
+    // 检查常见图片服务域名
+    const imageServices = [
+      'dicebear.com',
+      'gravatar.com', 
+      'avatars.githubusercontent.com',
+      'i.imgur.com',
+      'images.unsplash.com',
+      'picsum.photos',
+      'placeholder.com',
+      'placehold.co',
+      'via.placeholder.com',
+    ];
+    
+    if (imageServices.some(service => lowerUrl.includes(service))) {
+      return true;
+    }
+    
+    return false;
   }
 
   /**
@@ -194,52 +243,5 @@ export class FileRenderer extends BaseRenderer {
     return '文件';
   }
 
-  /**
-   * 显示图片预览
-   */
-  private showImagePreview(url: string): void {
-    // 创建预览层
-    const overlay = createElement('div', 'ss-image-preview-overlay');
-    overlay.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.85);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 100000;
-      cursor: zoom-out;
-    `;
-
-    const img = createElement('img') as HTMLImageElement;
-    img.src = url;
-    img.style.cssText = `
-      max-width: 90vw;
-      max-height: 90vh;
-      object-fit: contain;
-      border-radius: 4px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-    `;
-
-    overlay.appendChild(img);
-    document.body.appendChild(overlay);
-
-    // 点击关闭
-    overlay.addEventListener('click', () => {
-      overlay.remove();
-    });
-
-    // ESC 关闭
-    const handleKeydown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        overlay.remove();
-        document.removeEventListener('keydown', handleKeydown);
-      }
-    };
-    document.addEventListener('keydown', handleKeydown);
-  }
 }
 

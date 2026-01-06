@@ -93,10 +93,43 @@ export class FilePasteHandler extends EventEmitter<FilePasteEvents> {
   mount(container: HTMLElement): void {
     this.container = container;
 
-    // 监听粘贴事件
-    this.cleanupFns.push(
-      addEvent(container, 'paste', ((e: Event) => this.handlePaste(e as ClipboardEvent)) as EventListener)
-    );
+    // 在 window 上监听粘贴事件，这样无论焦点在哪里都能捕获
+    const handleWindowPaste = async (e: ClipboardEvent) => {
+      // 只要有选中的单元格就尝试处理
+      const activeCell = this.options.getActiveCell();
+      if (!activeCell) return;
+      
+      const columnType = this.options.getColumnType(activeCell.col);
+      
+      // 检查剪贴板中是否有文件
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      
+      let hasFile = false;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].kind === 'file') {
+          hasFile = true;
+          break;
+        }
+      }
+      
+      // 如果有文件且是文件类型列，处理粘贴
+      if (hasFile && (columnType === 'file' || columnType === 'link')) {
+        await this.handlePaste(e);
+      } else if (hasFile) {
+        // 检查是否有图片
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item.kind === 'file' && item.type.startsWith('image/')) {
+            await this.handlePaste(e);
+            break;
+          }
+        }
+      }
+    };
+    
+    window.addEventListener('paste', handleWindowPaste as unknown as EventListener, true);
+    this.cleanupFns.push(() => window.removeEventListener('paste', handleWindowPaste as unknown as EventListener, true));
 
     // 监听拖放事件
     this.cleanupFns.push(
@@ -133,7 +166,7 @@ export class FilePasteHandler extends EventEmitter<FilePasteEvents> {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       
-      // 检查是否是文件
+      // 检查是否是文件（包括图片）
       if (item.kind === 'file') {
         const file = item.getAsFile();
         if (file) {
@@ -145,19 +178,33 @@ export class FilePasteHandler extends EventEmitter<FilePasteEvents> {
     // 如果没有文件，让默认处理继续
     if (files.length === 0) return;
 
-    // 如果列类型不是 file 且不是 link，并且文件不是图片，不处理
-    if (columnType !== 'file' && columnType !== 'link') {
-      // 只有图片类型才可以粘贴到非文件列
-      const hasNonImage = files.some(f => !f.type.startsWith('image/'));
-      if (hasNonImage) return;
+    // 检查是否有图片文件
+    const hasImageFile = files.some(f => f.type.startsWith('image/'));
+    
+    // 如果是文件类型列，处理所有文件
+    if (columnType === 'file') {
+      e.preventDefault();
+      e.stopPropagation();
+      await this.processFiles(files, row, col);
+      return;
     }
-
-    // 阻止默认粘贴行为
-    e.preventDefault();
-    e.stopPropagation();
-
-    // 处理文件
-    await this.processFiles(files, row, col);
+    
+    // 如果是链接类型列，也处理文件
+    if (columnType === 'link') {
+      e.preventDefault();
+      e.stopPropagation();
+      await this.processFiles(files, row, col);
+      return;
+    }
+    
+    // 对于其他类型列，只处理图片
+    if (hasImageFile) {
+      e.preventDefault();
+      e.stopPropagation();
+      // 只处理图片文件
+      const imageFiles = files.filter(f => f.type.startsWith('image/'));
+      await this.processFiles(imageFiles, row, col);
+    }
   }
 
   /**

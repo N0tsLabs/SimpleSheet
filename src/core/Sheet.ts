@@ -28,6 +28,9 @@ import type {
 import { addEvent, addEvents, getMousePosition } from '../utils/dom';
 import { normalizeRange } from '../utils/helpers';
 import { showExpandOverlay, hideExpandOverlay, setExpandOverlayDblClickHandler, getCurrentExpandCell } from '../renderers/TextRenderer';
+import { showImagePreview } from '../plugins/ImageViewer';
+import { showLinkPopover, closeLinkPopover } from '../plugins/LinkPopover';
+import { showTagsPopover, closeTagsPopover } from '../plugins/TagsPopover';
 
 // 导入样式
 import '../styles/index.css';
@@ -67,6 +70,10 @@ export class Sheet extends EventEmitter<SheetEventMap> {
   
   private cleanupFns: Array<() => void> = [];
   private isDestroyed = false;
+  
+  // 双击检测
+  private lastClickTime = 0;
+  private lastClickCell: { row: number; col: number } | null = null;
 
   constructor(container: string | HTMLElement, options: SheetOptions) {
     super();
@@ -179,6 +186,33 @@ export class Sheet extends EventEmitter<SheetEventMap> {
       }
     );
     
+    // 设置单元格值变化回调（用于复选框等直接点击修改的场景）
+    this.renderer.setOnCellChange((row, col, value) => {
+      if (this.options.readonly) return;
+      
+      const column = this.options.columns[col];
+      if (column?.readonly) return;
+      
+      const oldValue = this.dataModel.getCellValue(row, col);
+      this.dataModel.setCellValue(row, col, value);
+      
+      // 记录历史
+      this.historyManager.record([{ row, col, oldValue, newValue: value }]);
+      
+      // 发出事件
+      this.emit('data:change' as any, {
+        row,
+        col,
+        oldValue,
+        newValue: value,
+        rowData: this.dataModel.getRowData(row) || {},
+        column,
+      });
+      
+      // 重新渲染
+      this.renderer.render();
+    });
+    
     // 设置编辑器层
     const editorLayer = this.renderer.getEditorLayer();
     if (editorLayer) {
@@ -244,7 +278,6 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     // 鼠标事件
     this.cleanupFns.push(
       addEvent(root, 'mousedown', this.handleMouseDown.bind(this) as EventListener),
-      addEvent(root, 'dblclick', this.handleDoubleClick.bind(this) as EventListener),
       addEvent(root, 'contextmenu', this.handleContextMenu.bind(this) as EventListener)
     );
     
@@ -255,6 +288,11 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     );
     
     // 键盘事件
+    this.keyboardManager.on('keydown', () => {
+      // 任何键盘操作都关闭悬浮窗
+      closeLinkPopover();
+      closeTagsPopover();
+    });
     this.keyboardManager.on('navigation', this.handleNavigation.bind(this));
     this.keyboardManager.on('enter', this.handleEnter.bind(this));
     this.keyboardManager.on('tab', this.handleTab.bind(this));
@@ -377,6 +415,30 @@ export class Sheet extends EventEmitter<SheetEventMap> {
       return;
     }
     
+    // 检查是否点击了图片预览
+    const previewImg = target.closest('.ss-cell-file-img') as HTMLElement;
+    if (previewImg) {
+      const previewUrl = previewImg.getAttribute('data-preview-url');
+      if (previewUrl) {
+        e.stopPropagation();
+        showImagePreview(previewUrl, previewImg.getAttribute('alt') || undefined);
+        return;
+      }
+    }
+    
+    // 检查是否点击了复选框 - 复选框自己处理点击，不触发双击编辑
+    const checkbox = target.closest('.ss-checkbox') as HTMLElement;
+    if (checkbox) {
+      // 重置双击检测，避免影响其他单元格
+      this.lastClickTime = 0;
+      this.lastClickCell = null;
+      return; // 让复选框自己处理
+    }
+    
+    // 关闭已有的悬浮窗
+    closeLinkPopover();
+    closeTagsPopover();
+    
     // 如果点击的不是当前展开的单元格，关闭预览
     const currentExpandCell = getCurrentExpandCell();
     if (currentExpandCell) {
@@ -442,6 +504,36 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     
     if (!cell) return;
     
+    // 双击检测：同一单元格，300ms 内两次点击
+    const now = Date.now();
+    const isDoubleClick = 
+      this.lastClickCell &&
+      this.lastClickCell.row === cell.row &&
+      this.lastClickCell.col === cell.col &&
+      now - this.lastClickTime < 300;
+    
+    // 更新点击记录
+    this.lastClickTime = now;
+    this.lastClickCell = { row: cell.row, col: cell.col };
+    
+    if (isDoubleClick && !this.options.readonly) {
+      // 双击 - 进入编辑模式
+      closeLinkPopover();
+      closeTagsPopover();
+      this.startEdit(cell.row, cell.col);
+      
+      this.emit('cell:dblclick', {
+        row: cell.row,
+        col: cell.col,
+        value: this.dataModel.getCellValue(cell.row, cell.col),
+        rowData: this.dataModel.getRowData(cell.row) || {},
+        column: this.options.columns[cell.col],
+        originalEvent: e,
+      });
+      return; // 双击时不执行单击逻辑
+    }
+    
+    // 单击逻辑
     if (e.shiftKey && this.options.allowMultiSelect) {
       // Shift+点击扩展选区
       this.selectionManager.extendSelection(cell.row, cell.col);
@@ -456,12 +548,39 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     // 滚动到单元格
     this.renderer.scrollToCell(cell.row, cell.col);
     
+    // 根据列类型显示对应的悬浮窗
+    const column = this.options.columns[cell.col];
+    const cellValue = this.dataModel.getCellValue(cell.row, cell.col);
+    
+    if (column && cellValue) {
+      // 获取单元格 DOM 元素用于定位悬浮窗
+      const cellEl = this.renderer.getCellElement(cell.row, cell.col);
+      
+      if (cellEl) {
+        if (column.type === 'link' || column.type === 'email' || column.type === 'phone') {
+          // 链接/邮箱/电话类型 - 显示 LinkPopover
+          showLinkPopover({
+            type: column.type,
+            value: String(cellValue),
+            cell: cellEl,
+          });
+        } else if (column.type === 'select' && Array.isArray(cellValue) && cellValue.length > 0) {
+          // 多选/标签类型（select + 数组值）- 显示 TagsPopover
+          showTagsPopover({
+            values: cellValue,
+            options: column.options || [],
+            cell: cellEl,
+          });
+        }
+      }
+    }
+    
     this.emit('cell:click', {
       row: cell.row,
       col: cell.col,
-      value: this.dataModel.getCellValue(cell.row, cell.col),
+      value: cellValue,
       rowData: this.dataModel.getRowData(cell.row) || {},
-      column: this.options.columns[cell.col],
+      column: column,
       originalEvent: e,
     });
   }
@@ -488,32 +607,6 @@ export class Sheet extends EventEmitter<SheetEventMap> {
    */
   private handleMouseUp(): void {
     this.selectionManager.endDragSelection();
-  }
-
-  /**
-   * 处理双击（进入编辑模式）
-   */
-  private handleDoubleClick(e: MouseEvent): void {
-    if (this.options.readonly) return;
-    
-    const root = this.renderer.getRoot();
-    if (!root) return;
-    
-    const pos = getMousePosition(e, root);
-    const cell = this.renderer.getCellFromPoint(pos.x, pos.y);
-    
-    if (cell) {
-      this.startEdit(cell.row, cell.col);
-      
-      this.emit('cell:dblclick', {
-        row: cell.row,
-        col: cell.col,
-        value: this.dataModel.getCellValue(cell.row, cell.col),
-        rowData: this.dataModel.getRowData(cell.row) || {},
-        column: this.options.columns[cell.col],
-        originalEvent: e,
-      });
-    }
   }
 
   /**
@@ -741,7 +834,17 @@ export class Sheet extends EventEmitter<SheetEventMap> {
       normalized.end.col
     );
     
-    await this.clipboardManager.copy(values);
+    // 获取范围内的列信息，用于正确格式化特殊类型的值
+    const rangeColumns = this.options.columns.slice(
+      normalized.start.col,
+      normalized.end.col + 1
+    ).map(col => ({
+      type: col.type,
+      options: col.options,
+      dateFormat: (col as any).dateFormat,
+    }));
+    
+    await this.clipboardManager.copy(values, rangeColumns);
     
     this.emit('copy', {
       data: values,
@@ -775,6 +878,13 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     
     const activeCell = this.selectionManager.getActiveCell();
     if (!activeCell) return;
+    
+    // 检查当前列类型 - 如果是文件类型列，让 FilePasteHandler 处理
+    const column = this.options.columns[activeCell.col];
+    if (column?.type === 'file') {
+      // 不处理文本粘贴，让 FilePasteHandler 处理文件粘贴
+      return;
+    }
     
     const values = await this.clipboardManager.paste();
     if (!values || values.length === 0) return;
@@ -949,6 +1059,10 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     
     const cellMeta = this.dataModel.getCellMeta(row, col);
     if (cellMeta?.readonly) return;
+    
+    // 关闭悬浮窗
+    closeLinkPopover();
+    closeTagsPopover();
     
     // 隐藏展开浮层（立即隐藏，避免动画闪烁）
     hideExpandOverlay(true);
@@ -1268,6 +1382,11 @@ export class Sheet extends EventEmitter<SheetEventMap> {
       columns: this.options.columns,
     });
     
+    // 更新选区索引必须在 renderer.updateOptions 之后
+    // 因为 shiftColumnsAfter 会触发 emitChange -> 渲染选区框
+    // 此时需要表头已经更新，才能正确计算选区框位置
+    this.selectionManager.shiftColumnsAfter(index, 1);
+    
     this.emit('column:insert', { index, column });
   }
 
@@ -1294,6 +1413,11 @@ export class Sheet extends EventEmitter<SheetEventMap> {
       this.renderer.updateOptions({
         columns: this.options.columns,
       });
+      
+      // 更新选区索引必须在 renderer.updateOptions 之后
+      // 因为 shiftColumnsOnDelete 会触发 emitChange -> 渲染选区框
+      // 此时需要表头已经更新，才能正确计算选区框位置
+      this.selectionManager.shiftColumnsOnDelete(index);
       
       this.emit('column:delete', { index, column: deleted });
     }
@@ -1533,6 +1657,27 @@ export class Sheet extends EventEmitter<SheetEventMap> {
    */
   refresh(): void {
     this.renderer.refresh();
+  }
+
+  /**
+   * 设置单元格验证错误（显示红色高亮）
+   */
+  setValidationError(row: number, col: number, message: string): void {
+    this.renderer.setValidationError(row, col, message);
+  }
+
+  /**
+   * 清除单元格验证错误
+   */
+  clearValidationError(row: number, col: number): void {
+    this.renderer.clearValidationError(row, col);
+  }
+
+  /**
+   * 清除所有验证错误
+   */
+  clearAllValidationErrors(): void {
+    this.renderer.clearAllValidationErrors();
   }
 
   /**

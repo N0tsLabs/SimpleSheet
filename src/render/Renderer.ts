@@ -5,7 +5,17 @@
 
 import type { Column, RowData, CellMeta, VirtualScrollState, CellRenderer } from '../types';
 import { VirtualScroll } from './VirtualScroll';
-import { TextRenderer, NumberRenderer } from '../renderers';
+import { 
+  TextRenderer, 
+  NumberRenderer, 
+  DateRenderer, 
+  SelectRenderer,
+  EmailRenderer,
+  PhoneRenderer,
+  LinkRenderer,
+  CheckboxRenderer,
+  FileRenderer,
+} from '../renderers';
 import { createElement, setStyles, classNames } from '../utils/dom';
 import { columnIndexToLetter } from '../utils/helpers';
 
@@ -47,13 +57,23 @@ export class Renderer {
   private getRowDataFn: ((row: number) => RowData) | null = null;
   private getCellMetaFn: ((row: number, col: number) => CellMeta | undefined) | null = null;
   
+  /** 单元格值变化回调（用于复选框等直接点击修改的场景） */
+  private onCellChangeFn: ((row: number, col: number, value: any) => void) | null = null;
+  
+  /** 验证错误存储 */
+  private validationErrors: Map<string, string> = new Map();
+  
   /** 选区状态 */
   private selectedCells: Set<string> = new Set();
   private activeCell: { row: number; col: number } | null = null;
+  
+  /** 上一次的列数量，用于检测列变化 */
+  private lastColumnCount: number = 0;
 
   constructor(container: HTMLElement, options: RendererOptions) {
     this.container = container;
     this.options = options;
+    this.lastColumnCount = options.columns.length;
     
     this.virtualScroll = new VirtualScroll({
       rowHeight: options.rowHeight,
@@ -130,6 +150,98 @@ export class Renderer {
     this.getDataFn = getData;
     this.getRowDataFn = getRowData;
     this.getCellMetaFn = getCellMeta;
+  }
+  
+  /**
+   * 设置单元格值变化回调
+   */
+  setOnCellChange(callback: (row: number, col: number, value: any) => void): void {
+    this.onCellChangeFn = callback;
+  }
+  
+  /**
+   * 设置单元格验证错误
+   */
+  setValidationError(row: number, col: number, message: string): void {
+    const key = `${row}:${col}`;
+    this.validationErrors.set(key, message);
+    
+    // 更新单元格显示
+    const cell = this.cellCache.get(key);
+    if (cell) {
+      cell.classList.add('ss-cell-error', 'ss-cell-error-flash');
+      
+      // 添加错误提示
+      this.updateErrorTooltip(cell, message);
+      
+      // 移除闪烁动画类
+      setTimeout(() => {
+        cell.classList.remove('ss-cell-error-flash');
+      }, 600);
+    }
+  }
+  
+  /**
+   * 清除单元格验证错误
+   */
+  clearValidationError(row: number, col: number): void {
+    const key = `${row}:${col}`;
+    this.validationErrors.delete(key);
+    
+    // 更新单元格显示
+    const cell = this.cellCache.get(key);
+    if (cell) {
+      cell.classList.remove('ss-cell-error', 'ss-cell-error-flash');
+      this.removeErrorTooltip(cell);
+    }
+  }
+  
+  /**
+   * 清除所有验证错误
+   */
+  clearAllValidationErrors(): void {
+    for (const key of this.validationErrors.keys()) {
+      const cell = this.cellCache.get(key);
+      if (cell) {
+        cell.classList.remove('ss-cell-error', 'ss-cell-error-flash');
+        this.removeErrorTooltip(cell);
+      }
+    }
+    this.validationErrors.clear();
+  }
+  
+  /**
+   * 更新错误提示
+   */
+  private updateErrorTooltip(cell: HTMLElement, message: string): void {
+    // 添加角标
+    let badge = cell.querySelector('.ss-cell-error-badge') as HTMLElement;
+    if (!badge) {
+      badge = createElement('div', 'ss-cell-error-badge');
+      cell.appendChild(badge);
+    }
+    
+    // 添加提示气泡
+    let tooltip = cell.querySelector('.ss-cell-error-tooltip') as HTMLElement;
+    if (!tooltip) {
+      tooltip = createElement('div', 'ss-cell-error-tooltip');
+      cell.appendChild(tooltip);
+    }
+    tooltip.textContent = message;
+  }
+  
+  /**
+   * 移除错误提示
+   */
+  private removeErrorTooltip(cell: HTMLElement): void {
+    const badge = cell.querySelector('.ss-cell-error-badge');
+    if (badge) {
+      badge.remove();
+    }
+    const tooltip = cell.querySelector('.ss-cell-error-tooltip');
+    if (tooltip) {
+      tooltip.remove();
+    }
   }
 
   /**
@@ -358,6 +470,16 @@ export class Renderer {
         cell = this.createCell(rowIndex, colIndex);
         this.cellCache.set(cellKey, cell);
         row.appendChild(cell);
+      } else {
+        // 修复：已存在的单元格也需要更新位置和宽度
+        // 因为插入/删除列后，colIndex 对应的实际位置会变化
+        // 使用 getColumnOffsetDirect 确保与选区框计算一致
+        const column = this.options.columns[colIndex];
+        const left = this.getColumnOffsetDirect(colIndex);
+        setStyles(cell, {
+          width: `${column?.width ?? 100}px`,
+          left: `${left}px`,
+        });
       }
       
       // 更新单元格内容
@@ -384,7 +506,8 @@ export class Renderer {
     cell.dataset.col = String(colIndex);
     
     const column = this.options.columns[colIndex];
-    const left = this.virtualScroll.getColumnOffset(colIndex);
+    // 使用 getColumnOffsetDirect 确保与选区框计算一致
+    const left = this.getColumnOffsetDirect(colIndex);
     
     setStyles(cell, {
       width: `${column?.width ?? 100}px`,
@@ -444,6 +567,16 @@ export class Renderer {
     
     cell.classList.toggle('ss-cell-selected', isSelected);
     cell.classList.toggle('ss-cell-active', isActive);
+    
+    // 应用验证错误样式
+    const errorMessage = this.validationErrors.get(cellKey);
+    if (errorMessage) {
+      cell.classList.add('ss-cell-error');
+      this.updateErrorTooltip(cell, errorMessage);
+    } else {
+      cell.classList.remove('ss-cell-error');
+      this.removeErrorTooltip(cell);
+    }
   }
 
   /**
@@ -461,6 +594,31 @@ export class Renderer {
         switch (type) {
           case 'number':
             renderer = new NumberRenderer();
+            break;
+          case 'date':
+            renderer = new DateRenderer();
+            break;
+          case 'select':
+            renderer = new SelectRenderer();
+            break;
+          case 'email':
+            renderer = new EmailRenderer();
+            break;
+          case 'phone':
+            renderer = new PhoneRenderer();
+            break;
+          case 'link':
+            renderer = new LinkRenderer();
+            break;
+          case 'boolean':
+            renderer = new CheckboxRenderer();
+            // 设置复选框值变化回调
+            (renderer as CheckboxRenderer).setOnChange((row, col, value) => {
+              this.onCellChangeFn?.(row, col, value);
+            });
+            break;
+          case 'file':
+            renderer = new FileRenderer();
             break;
           default:
             renderer = new TextRenderer();
@@ -500,13 +658,25 @@ export class Renderer {
   private selectionBox: HTMLElement | null = null;
 
   /**
+   * 计算列偏移量（直接使用 this.options.columns，确保与渲染数据一致）
+   */
+  private getColumnOffsetDirect(colIndex: number): number {
+    let offset = this.options.showRowNumber ? this.options.rowNumberWidth : 0;
+    for (let i = 0; i < colIndex; i++) {
+      offset += this.options.columns[i]?.width ?? 100;
+    }
+    return offset;
+  }
+
+  /**
    * 渲染选区边框
+   * 重构：使用表头单元格的位置来确定水平位置（表头使用 flex 布局，位置一定正确）
    */
   private renderSelectionBorder(
     selectedCells: Array<{ row: number; col: number }>,
     activeCell: { row: number; col: number } | null
   ): void {
-    if (!this.selectionLayer || !this.scrollContainer) return;
+    if (!this.selectionLayer || !this.scrollContainer || !this.root || !this.headerRow) return;
     
     // 只移除选区框，保留其他元素（如填充手柄）
     if (this.selectionBox) {
@@ -527,15 +697,28 @@ export class Renderer {
       maxCol = Math.max(maxCol, cell.col);
     }
     
-    const scrollTop = this.scrollContainer.scrollTop;
-    const scrollLeft = this.scrollContainer.scrollLeft;
+    // 使用表头单元格来确定水平位置（表头使用 flex 布局，位置一定正确）
+    const headerCells = this.headerRow.querySelectorAll('.ss-header-cell:not(.ss-corner-cell)');
+    const minColHeader = headerCells[minCol] as HTMLElement;
+    const maxColHeader = headerCells[maxCol] as HTMLElement;
     
-    // 选区背景
+    if (!minColHeader || !maxColHeader) {
+      // 如果找不到表头单元格，不显示选区框
+      return;
+    }
+    
+    const rootRect = this.root.getBoundingClientRect();
+    const scrollTop = this.scrollContainer.scrollTop;
+    
+    // 水平位置从表头获取（最可靠）
+    const minColRect = minColHeader.getBoundingClientRect();
+    const maxColRect = maxColHeader.getBoundingClientRect();
+    
+    const left = minColRect.left - rootRect.left;
+    const width = maxColRect.right - minColRect.left;
+    
+    // 垂直位置通过计算获取
     const top = this.virtualScroll.getRowOffset(minRow) + this.options.headerHeight - scrollTop;
-    const left = this.virtualScroll.getColumnOffset(minCol) - scrollLeft;
-    const width = this.virtualScroll.getColumnOffset(maxCol) + 
-                  (this.options.columns[maxCol]?.width ?? 100) - 
-                  this.virtualScroll.getColumnOffset(minCol);
     const height = (maxRow - minRow + 1) * this.options.rowHeight;
     
     this.selectionBox = createElement('div', 'ss-selection-box');
@@ -577,9 +760,16 @@ export class Renderer {
    * 更新配置
    */
   updateOptions(options: Partial<RendererOptions>): void {
-    const columnsChanged = options.columns && options.columns.length !== this.options.columns.length;
+    // 修复：使用记录的上一次列数量来检测变化
+    // 因为 options.columns 和 this.options.columns 可能是同一个数组引用
+    // 当外部通过 splice 修改数组后，两边的 length 会相等，无法检测到变化
+    const newColumnCount = options.columns?.length ?? this.options.columns.length;
+    const columnsChanged = newColumnCount !== this.lastColumnCount;
     
     Object.assign(this.options, options);
+    
+    // 更新列数量记录
+    this.lastColumnCount = this.options.columns.length;
     
     this.virtualScroll.update({
       rowHeight: this.options.rowHeight,
@@ -593,8 +783,13 @@ export class Renderer {
     this.updateContainerStyles();
     this.renderHeader();
     
-    // 如果列数量变化，清除所有缓存并重新渲染
-    if (columnsChanged) {
+    // 如果列变化（数量或配置），清除所有缓存并重新渲染
+    // 总是清除渲染器缓存，因为列类型或配置可能已改变
+    if (options.columns) {
+      this.clearCache();
+      // 清除渲染器缓存，确保使用新的渲染器
+      this.rendererCache.clear();
+    } else if (columnsChanged) {
       this.clearCache();
     }
     
@@ -671,7 +866,8 @@ export class Renderer {
     const rootRect = this.root.getBoundingClientRect();
     
     const top = this.virtualScroll.getRowOffset(row) + this.options.headerHeight - scrollTop;
-    const left = this.virtualScroll.getColumnOffset(col) - scrollLeft;
+    // 使用 getColumnOffsetDirect 确保与单元格和选区框计算一致
+    const left = this.getColumnOffsetDirect(col) - scrollLeft;
     const width = this.options.columns[col]?.width ?? 100;
     const height = this.options.rowHeight;
     

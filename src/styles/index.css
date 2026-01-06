@@ -17,4 +17,6 @@
 @import './context-menu.css';
 @import './renderers.css';
 @import './plugins.css';
+@import './column-config.css';
+@import './image-viewer.css';
 

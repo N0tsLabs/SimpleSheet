@@ -1,5 +1,6 @@
 /**
  * 日期渲染器
+ * 支持自定义日期格式配置
  */
 
 import { BaseRenderer } from './BaseRenderer';
@@ -23,7 +24,9 @@ export class DateRenderer extends BaseRenderer {
       if (isNaN(date.getTime())) {
         formatted = String(value);
       } else {
-        formatted = formatDate(date, 'YYYY-MM-DD');
+        // 使用列配置的日期格式，默认 YYYY-MM-DD
+        const dateFormat = column.dateFormat || 'YYYY-MM-DD';
+        formatted = formatDate(date, dateFormat);
       }
     }
 

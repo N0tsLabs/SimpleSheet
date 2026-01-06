@@ -480,3 +480,253 @@
   color: #fff;
 }
 
+/* ========================================
+   链接操作悬浮窗
+   ======================================== */
+
+.ss-link-popover {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: ss-popover-in 0.15s ease;
+  max-width: 400px;
+}
+
+@keyframes ss-popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ss-link-popover-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  background: #f5f5f5;
+  border-radius: 4px;
+}
+
+.ss-link-popover-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.ss-link-popover-text {
+  font-size: 13px;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 250px;
+}
+
+.ss-link-popover-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.ss-link-popover-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: #f0f0f0;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  transition: all 0.15s ease;
+}
+
+.ss-link-popover-btn:hover {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.ss-link-popover-btn-primary {
+  background: var(--ss-primary-color, #3b82f6);
+  color: #fff;
+}
+
+.ss-link-popover-btn-primary:hover {
+  background: #2563eb;
+  color: #fff;
+}
+
+.ss-link-popover-btn-success {
+  background: #10b981;
+  color: #fff;
+}
+
+/* 暗色主题 */
+[data-theme="dark"] .ss-link-popover {
+  background: #2a2a3e;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .ss-link-popover-content {
+  background: #1a1a2e;
+}
+
+[data-theme="dark"] .ss-link-popover-text {
+  color: #e0e0e0;
+}
+
+[data-theme="dark"] .ss-link-popover-btn {
+  background: #3a3a4e;
+  color: #aaa;
+}
+
+[data-theme="dark"] .ss-link-popover-btn:hover {
+  background: #4a4a5e;
+  color: #fff;
+}
+
+/* ========================================
+   标签悬浮窗
+   ======================================== */
+
+.ss-tags-popover {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  padding: 12px;
+  min-width: 200px;
+  max-width: 350px;
+  animation: ss-popover-in 0.15s ease;
+}
+
+.ss-tags-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.ss-tags-popover-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+
+.ss-tags-popover-count {
+  font-size: 12px;
+  color: #999;
+  background: #f5f5f5;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.ss-tags-popover-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ss-tags-popover-tag {
+  display: inline-block;
+  padding: 5px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.ss-tags-popover-tag-plain {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+}
+
+.ss-tags-popover-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.ss-tags-popover-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  background: #f5f5f5;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #666;
+  transition: all 0.15s ease;
+}
+
+.ss-tags-popover-btn:hover {
+  background: #e8e8e8;
+  color: #333;
+}
+
+.ss-tags-popover-btn-success {
+  background: #10b981;
+  color: #fff;
+}
+
+.ss-tags-popover-btn-success:hover {
+  background: #059669;
+  color: #fff;
+}
+
+/* 暗色主题 */
+[data-theme="dark"] .ss-tags-popover {
+  background: #2a2a3e;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .ss-tags-popover-header {
+  border-color: #3a3a4e;
+}
+
+[data-theme="dark"] .ss-tags-popover-title {
+  color: #e0e0e0;
+}
+
+[data-theme="dark"] .ss-tags-popover-count {
+  background: #3a3a4e;
+  color: #aaa;
+}
+
+[data-theme="dark"] .ss-tags-popover-tag-plain {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e0e0e0;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+[data-theme="dark"] .ss-tags-popover-actions {
+  border-color: #3a3a4e;
+}
+
+[data-theme="dark"] .ss-tags-popover-btn {
+  background: #3a3a4e;
+  color: #aaa;
+}
+
+[data-theme="dark"] .ss-tags-popover-btn:hover {
+  background: #4a4a5e;
+  color: #fff;
+}
+

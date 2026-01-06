@@ -70,6 +70,14 @@ export { RowReorder } from './plugins/RowReorder';
 export { ColumnTypePicker, COLUMN_TYPES, createColumnByType } from './plugins/ColumnTypePicker';
 export { MultiValueEditor, showMultiValueEditor } from './plugins/MultiValueEditor';
 export { FilePasteHandler } from './plugins/FilePasteHandler';
+export { 
+  ColumnConfigDialog, 
+  showCreateColumnDialog, 
+  showEditColumnDialog,
+  DATE_FORMATS,
+  NUMBER_PREFIXES,
+  NUMBER_SUFFIXES,
+} from './plugins/ColumnConfigDialog';
 
 export { Validator, ValidationRules } from './plugins/Validator';
 export type { ValidationRule, ValidationResult, ValidatorType } from './plugins/Validator';

@@ -1,0 +1,596 @@
+/**
+ * 列配置弹窗样式
+ */
+
+/* 遮罩层 */
+.ss-ccd-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: ss-ccd-fade-in 0.2s ease;
+}
+
+@keyframes ss-ccd-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* 弹窗容器 */
+.ss-ccd-dialog {
+  background: var(--ss-bg-color, #fff);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  width: 480px;
+  max-width: 90vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  animation: ss-ccd-slide-in 0.2s ease;
+}
+
+@keyframes ss-ccd-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 标题栏 */
+.ss-ccd-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--ss-border-color, #e0e0e0);
+}
+
+.ss-ccd-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ss-text-color, #333);
+}
+
+.ss-ccd-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--ss-text-secondary, #666);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.ss-ccd-close:hover {
+  background: var(--ss-hover-bg, #f0f0f0);
+  color: var(--ss-text-color, #333);
+}
+
+/* 内容区 */
+.ss-ccd-content {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* 表单组 */
+.ss-ccd-form-group {
+  margin-bottom: 16px;
+}
+
+.ss-ccd-form-group:last-child {
+  margin-bottom: 0;
+}
+
+.ss-ccd-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ss-text-color, #333);
+  margin-bottom: 6px;
+}
+
+.ss-ccd-input,
+.ss-ccd-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--ss-border-color, #ddd);
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--ss-text-color, #333);
+  background: var(--ss-bg-color, #fff);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.ss-ccd-input:focus,
+.ss-ccd-select:focus {
+  outline: none;
+  border-color: var(--ss-primary-color, #1890ff);
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+.ss-ccd-input::placeholder {
+  color: var(--ss-text-secondary, #999);
+}
+
+/* 内联表单组 */
+.ss-ccd-inline-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ss-ccd-inline-group .ss-ccd-label {
+  margin-bottom: 0;
+  min-width: 70px;
+  flex-shrink: 0;
+}
+
+.ss-ccd-small-input {
+  width: 80px;
+}
+
+.ss-ccd-small-select {
+  width: auto;
+  min-width: 100px;
+}
+
+/* 复选框组 */
+.ss-ccd-checkbox-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ss-ccd-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.ss-ccd-checkbox-label {
+  font-size: 13px;
+  color: var(--ss-text-color, #333);
+  cursor: pointer;
+  margin-bottom: 0;
+}
+
+/* 类型配置区域 */
+.ss-ccd-type-config {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--ss-border-color, #e0e0e0);
+}
+
+.ss-ccd-type-config:empty {
+  display: none;
+}
+
+/* 配置区域标题 */
+.ss-ccd-config-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.ss-ccd-config-header .ss-ccd-label {
+  margin-bottom: 0;
+}
+
+.ss-ccd-btn-add {
+  padding: 4px 12px;
+  border: 1px dashed var(--ss-primary-color, #1890ff);
+  background: transparent;
+  color: var(--ss-primary-color, #1890ff);
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ss-ccd-btn-add:hover {
+  background: rgba(24, 144, 255, 0.1);
+}
+
+/* 选项列表 */
+.ss-ccd-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.ss-ccd-option-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: var(--ss-bg-secondary, #f9f9f9);
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+
+.ss-ccd-option-item:hover {
+  background: var(--ss-hover-bg, #f0f0f0);
+}
+
+.ss-ccd-option-item.ss-ccd-dragging {
+  opacity: 0.5;
+  background: var(--ss-primary-color-light, #e6f7ff);
+}
+
+.ss-ccd-drag-handle {
+  cursor: grab;
+  color: var(--ss-text-secondary, #999);
+  font-size: 14px;
+  padding: 0 4px;
+  user-select: none;
+}
+
+.ss-ccd-drag-handle:active {
+  cursor: grabbing;
+}
+
+.ss-ccd-option-input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--ss-border-color, #ddd);
+  border-radius: 4px;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.ss-ccd-option-input:focus {
+  outline: none;
+  border-color: var(--ss-primary-color, #1890ff);
+}
+
+.ss-ccd-option-value {
+  flex: 0.6;
+}
+
+.ss-ccd-btn-delete {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--ss-text-secondary, #999);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.ss-ccd-btn-delete:hover {
+  background: #ff4d4f;
+  color: white;
+}
+
+/* 提示文字 */
+.ss-ccd-hint {
+  text-align: center;
+  color: var(--ss-text-secondary, #999);
+  font-size: 13px;
+  padding: 20px;
+}
+
+/* 底部按钮 */
+.ss-ccd-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--ss-border-color, #e0e0e0);
+}
+
+.ss-ccd-btn {
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.ss-ccd-btn-cancel {
+  background: var(--ss-bg-color, #fff);
+  border-color: var(--ss-border-color, #ddd);
+  color: var(--ss-text-color, #333);
+}
+
+.ss-ccd-btn-cancel:hover {
+  border-color: var(--ss-text-secondary, #999);
+}
+
+.ss-ccd-btn-confirm {
+  background: var(--ss-primary-color, #1890ff);
+  color: white;
+}
+
+.ss-ccd-btn-confirm:hover {
+  background: var(--ss-primary-color-dark, #096dd9);
+}
+
+/* 数字配置 */
+.ss-ccd-number-config {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 日期配置 */
+.ss-ccd-date-config .ss-ccd-select {
+  width: 100%;
+}
+
+/* 浅色主题（默认） */
+[data-theme="light"] .ss-ccd-dialog,
+.ss-ccd-overlay:not([data-theme="dark"]) .ss-ccd-dialog {
+  background: #ffffff;
+}
+
+[data-theme="light"] .ss-ccd-title,
+.ss-ccd-overlay:not([data-theme="dark"]) .ss-ccd-title {
+  color: #333333;
+}
+
+[data-theme="light"] .ss-ccd-label,
+.ss-ccd-overlay:not([data-theme="dark"]) .ss-ccd-label {
+  color: #333333;
+}
+
+[data-theme="light"] .ss-ccd-input,
+[data-theme="light"] .ss-ccd-select,
+.ss-ccd-overlay:not([data-theme="dark"]) .ss-ccd-input,
+.ss-ccd-overlay:not([data-theme="dark"]) .ss-ccd-select {
+  background: #ffffff;
+  border-color: #dddddd;
+  color: #333333;
+}
+
+[data-theme="light"] .ss-ccd-option-item,
+.ss-ccd-overlay:not([data-theme="dark"]) .ss-ccd-option-item {
+  background: #f9f9f9;
+}
+
+[data-theme="light"] .ss-ccd-btn-cancel,
+.ss-ccd-overlay:not([data-theme="dark"]) .ss-ccd-btn-cancel {
+  background: #ffffff;
+  border-color: #dddddd;
+  color: #333333;
+}
+
+/* 暗色主题适配 */
+[data-theme="dark"] .ss-ccd-dialog {
+  background: #1f1f1f;
+}
+
+[data-theme="dark"] .ss-ccd-header {
+  border-color: #303030;
+}
+
+[data-theme="dark"] .ss-ccd-title {
+  color: #fff;
+}
+
+[data-theme="dark"] .ss-ccd-close {
+  color: #999;
+}
+
+[data-theme="dark"] .ss-ccd-close:hover {
+  background: #303030;
+  color: #fff;
+}
+
+[data-theme="dark"] .ss-ccd-label {
+  color: #e0e0e0;
+}
+
+[data-theme="dark"] .ss-ccd-input,
+[data-theme="dark"] .ss-ccd-select {
+  background: #2a2a2a;
+  border-color: #404040;
+  color: #e0e0e0;
+}
+
+[data-theme="dark"] .ss-ccd-input:focus,
+[data-theme="dark"] .ss-ccd-select:focus {
+  border-color: #1890ff;
+}
+
+[data-theme="dark"] .ss-ccd-option-item {
+  background: #2a2a2a;
+}
+
+[data-theme="dark"] .ss-ccd-option-item:hover {
+  background: #333;
+}
+
+[data-theme="dark"] .ss-ccd-type-config {
+  border-color: #404040;
+}
+
+[data-theme="dark"] .ss-ccd-footer {
+  border-color: #303030;
+}
+
+[data-theme="dark"] .ss-ccd-btn-cancel {
+  background: #2a2a2a;
+  border-color: #404040;
+  color: #e0e0e0;
+}
+
+/* ========================================
+   颜色选择器样式
+   ======================================== */
+
+.ss-ccd-color-wrapper {
+  flex-shrink: 0;
+}
+
+.ss-ccd-color-btn {
+  width: 28px;
+  height: 28px;
+  border: 2px solid #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s;
+}
+
+.ss-ccd-color-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+/* 颜色选择器弹窗 */
+.ss-ccd-color-picker {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  padding: 12px;
+  width: 220px;
+  animation: ss-ccd-picker-in 0.15s ease;
+}
+
+@keyframes ss-ccd-picker-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ss-ccd-color-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.ss-ccd-color-item {
+  width: 32px;
+  height: 32px;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ss-ccd-color-item:hover {
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.ss-ccd-color-item.selected {
+  border-color: #333;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+}
+
+.ss-ccd-color-custom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.ss-ccd-color-input {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.ss-ccd-color-input::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.ss-ccd-color-input::-webkit-color-swatch {
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.ss-ccd-color-label {
+  flex: 1;
+  font-size: 12px;
+  color: #666;
+}
+
+.ss-ccd-color-clear {
+  padding: 4px 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 12px;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ss-ccd-color-clear:hover {
+  background: #f5f5f5;
+  border-color: #d9d9d9;
+}
+
+/* 暗色主题 */
+[data-theme="dark"] .ss-ccd-color-btn {
+  border-color: #333;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .ss-ccd-color-picker {
+  background: #1f1f1f;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .ss-ccd-color-item.selected {
+  border-color: #fff;
+}
+
+[data-theme="dark"] .ss-ccd-color-custom {
+  border-color: #333;
+}
+
+[data-theme="dark"] .ss-ccd-color-label {
+  color: #aaa;
+}
+
+[data-theme="dark"] .ss-ccd-color-clear {
+  background: #2a2a2a;
+  border-color: #404040;
+  color: #e0e0e0;
+}
+
+[data-theme="dark"] .ss-ccd-color-clear:hover {
+  background: #333;
+}
+

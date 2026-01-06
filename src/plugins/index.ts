@@ -36,4 +36,18 @@ export type { ConditionalFormatRule, ConditionalFormatType, FormatStyle } from '
 export { ColumnTypePicker, COLUMN_TYPES, createColumnByType } from './ColumnTypePicker';
 export { MultiValueEditor, showMultiValueEditor } from './MultiValueEditor';
 export { FilePasteHandler } from './FilePasteHandler';
+export { 
+  ColumnConfigDialog, 
+  showCreateColumnDialog, 
+  showEditColumnDialog,
+  DATE_FORMATS,
+  NUMBER_PREFIXES,
+  NUMBER_SUFFIXES,
+} from './ColumnConfigDialog';
+export type { ColumnConfigDialogOptions } from './ColumnConfigDialog';
+export { ImageViewer, getImageViewer, showImagePreview, closeImagePreview } from './ImageViewer';
+export { showLinkPopover, closeLinkPopover } from './LinkPopover';
+export type { LinkPopoverOptions } from './LinkPopover';
+export { showTagsPopover, closeTagsPopover } from './TagsPopover';
+export type { TagsPopoverOptions } from './TagsPopover';
 

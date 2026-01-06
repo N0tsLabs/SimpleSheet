@@ -47,6 +47,67 @@ export class SelectionManager extends EventEmitter<SelectionEvents> {
   }
 
   /**
+   * 插入列后调整选区索引
+   * 当在 index 位置插入新列时，所有 >= index 的列索引需要 +1
+   */
+  shiftColumnsAfter(index: number, delta: number): void {
+    // 调整 activeCell
+    if (this.activeCell && this.activeCell.col >= index) {
+      this.activeCell.col += delta;
+    }
+    
+    // 调整所有选区范围
+    for (const range of this.ranges) {
+      if (range.start.col >= index) {
+        range.start.col += delta;
+      }
+      if (range.end.col >= index) {
+        range.end.col += delta;
+      }
+    }
+    
+    // 调整拖拽起始位置
+    if (this.selectionStart && this.selectionStart.col >= index) {
+      this.selectionStart.col += delta;
+    }
+    
+    this.emitChange();
+  }
+
+  /**
+   * 删除列后调整选区索引
+   * 当删除 index 位置的列时，所有 > index 的列索引需要 -1
+   */
+  shiftColumnsOnDelete(index: number): void {
+    // 调整 activeCell
+    if (this.activeCell) {
+      if (this.activeCell.col === index) {
+        // 如果活动单元格在被删除的列上，移动到前一列（如果存在）或后一列
+        this.activeCell.col = Math.max(0, Math.min(this.activeCell.col, this.maxCol - 1));
+      } else if (this.activeCell.col > index) {
+        this.activeCell.col -= 1;
+      }
+    }
+    
+    // 调整所有选区范围
+    for (const range of this.ranges) {
+      if (range.start.col > index) {
+        range.start.col -= 1;
+      }
+      if (range.end.col > index) {
+        range.end.col -= 1;
+      }
+    }
+    
+    // 调整拖拽起始位置
+    if (this.selectionStart && this.selectionStart.col > index) {
+      this.selectionStart.col -= 1;
+    }
+    
+    this.emitChange();
+  }
+
+  /**
    * 获取当前活动单元格
    */
   getActiveCell(): CellPosition | null {

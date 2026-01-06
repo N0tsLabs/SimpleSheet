@@ -13,7 +13,10 @@ import {
   Search,
   Validator,
   ValidationRules,
+  showCreateColumnDialog,
+  showEditColumnDialog,
 } from '../../../src';
+import type { Column } from '../../../src';
 import '../../../src/styles/index.css';
 
 // 容器引用
@@ -39,20 +42,93 @@ const currentSearchIndex = ref(-1);
 const filterDepartment = ref('');
 const showStats = ref({ total: 0, filtered: 0 });
 
-// 列定义
-const columns = ref([
+// 部门选项（带颜色）
+const departmentOptions = [
+  { label: '技术部', value: 'tech', color: '#e3f2fd', textColor: '#1565c0' },
+  { label: '产品部', value: 'product', color: '#e8f5e9', textColor: '#2e7d32' },
+  { label: '设计部', value: 'design', color: '#fce4ec', textColor: '#c2185b' },
+  { label: '市场部', value: 'market', color: '#fff3e0', textColor: '#ef6c00' },
+  { label: '运营部', value: 'operation', color: '#f3e5f5', textColor: '#7b1fa2' },
+];
+
+// 状态选项（带颜色）
+const statusOptions = [
+  { label: '在职', value: 'active', color: '#c8e6c9', textColor: '#2e7d32' },
+  { label: '试用期', value: 'probation', color: '#fff9c4', textColor: '#f9a825' },
+  { label: '离职', value: 'resigned', color: '#ffcdd2', textColor: '#c62828' },
+  { label: '休假', value: 'vacation', color: '#b3e5fc', textColor: '#0277bd' },
+];
+
+// 标签选项（带颜色，用于多选）
+const tagOptions = [
+  { label: '核心成员', value: 'core', color: '#ff5722', textColor: '#ffffff' },
+  { label: '技术骨干', value: 'tech_lead', color: '#2196f3', textColor: '#ffffff' },
+  { label: '新人', value: 'newcomer', color: '#4caf50', textColor: '#ffffff' },
+  { label: '管理层', value: 'management', color: '#9c27b0', textColor: '#ffffff' },
+  { label: '远程办公', value: 'remote', color: '#607d8b', textColor: '#ffffff' },
+];
+
+// 列定义 - 包含所有列类型演示
+const columns = ref<Column[]>([
   { key: 'id', title: 'ID', width: 60, type: 'number' as const, readonly: true, sortable: true },
+  { key: 'avatar', title: '头像', width: 80, type: 'file' as const },
   { key: 'name', title: '姓名', width: 100, sortable: true },
-  { key: 'department', title: '部门', width: 100, sortable: true },
-  { key: 'email', title: '邮箱', width: 180 },
+  { 
+    key: 'department', 
+    title: '部门', 
+    width: 110, 
+    type: 'select' as const, 
+    options: departmentOptions,
+    sortable: true 
+  },
+  { 
+    key: 'status', 
+    title: '状态', 
+    width: 100, 
+    type: 'select' as const, 
+    options: statusOptions 
+  },
+  { key: 'email', title: '邮箱', width: 180, type: 'email' as const },
+  { key: 'phone', title: '电话', width: 130, type: 'phone' as const },
   { key: 'age', title: '年龄', width: 80, type: 'number' as const, sortable: true },
-  { key: 'salary', title: '薪资', width: 100, type: 'number' as const, sortable: true },
-  { key: 'performance', title: '绩效', width: 80, type: 'number' as const, sortable: true },
-  { key: 'joinDate', title: '入职日期', width: 110 },
+  { 
+    key: 'salary', 
+    title: '薪资', 
+    width: 120, 
+    type: 'number' as const, 
+    sortable: true,
+    numberPrefix: '¥',
+    useThousandSeparator: true,
+  },
+  { 
+    key: 'performance', 
+    title: '绩效', 
+    width: 80, 
+    type: 'number' as const, 
+    sortable: true,
+    decimalPlaces: 1,
+  },
+  { key: 'isFullTime', title: '全职', width: 70, type: 'boolean' as const },
+  { 
+    key: 'joinDate', 
+    title: '入职日期', 
+    width: 120, 
+    type: 'date' as const,
+    dateFormat: 'YYYY-MM-DD',
+  },
+  { key: 'website', title: '个人主页', width: 160, type: 'link' as const },
+  { 
+    key: 'tags', 
+    title: '标签', 
+    width: 180, 
+    type: 'select' as const, 
+    options: tagOptions,
+  },
+  { key: 'attachments', title: '附件', width: 120, type: 'file' as const },
   { key: 'remark', title: '备注', width: 200, wrapText: 'ellipsis' as const },
 ]);
 
-// 部门列表
+// 部门列表（用于筛选）
 const departments = ['技术部', '产品部', '设计部', '市场部', '运营部'];
 
 // 生成测试数据
@@ -71,17 +147,44 @@ const generateData = () => {
     '多行文本测试\n第二行\n第三行内容',
   ];
   
+  const deptValues = ['tech', 'product', 'design', 'market', 'operation'];
+  const statusValues = ['active', 'probation', 'resigned', 'vacation'];
+  const tagValues = ['core', 'tech_lead', 'newcomer', 'management', 'remote'];
+  
+  // 示例头像 URL（使用占位图服务）
+  const avatars = [
+    'https://api.dicebear.com/7.x/avataaars/svg?seed=1',
+    'https://api.dicebear.com/7.x/avataaars/svg?seed=2',
+    'https://api.dicebear.com/7.x/avataaars/svg?seed=3',
+    '',
+    'https://api.dicebear.com/7.x/avataaars/svg?seed=5',
+  ];
+  
   const data: any[] = [];
   for (let i = 0; i < 100; i++) {
+    // 随机生成1-3个标签
+    const numTags = 1 + Math.floor(Math.random() * 3);
+    const shuffledTags = [...tagValues].sort(() => Math.random() - 0.5);
+    const selectedTags = shuffledTags.slice(0, numTags);
+    
     data.push({
       id: i + 1,
+      avatar: i < 5 ? (avatars[i] ? { url: avatars[i], name: `avatar${i+1}.svg` } : null) : null,
       name: names[i % names.length],
-      department: departments[i % departments.length],
+      department: deptValues[i % deptValues.length],
+      status: statusValues[i % statusValues.length],
       email: `user${i + 1}@example.com`,
+      phone: `138${String(10000000 + Math.floor(Math.random() * 90000000)).slice(0, 8)}`,
       age: 22 + Math.floor(Math.random() * 30),
       salary: Math.floor(8000 + Math.random() * 42000),
       performance: Number((3 + Math.random() * 2).toFixed(1)),
+      isFullTime: Math.random() > 0.2, // 80% 全职
       joinDate: `202${Math.floor(Math.random() * 4)}-${String(1 + Math.floor(Math.random() * 12)).padStart(2, '0')}-${String(1 + Math.floor(Math.random() * 28)).padStart(2, '0')}`,
+      website: i % 3 === 0 ? `https://github.com/user${i + 1}` : '',
+      tags: selectedTags,
+      attachments: i % 5 === 0 ? [
+        { url: 'https://example.com/doc.pdf', name: '简历.pdf', type: 'application/pdf' },
+      ] : null,
       remark: remarks[i % remarks.length],
     });
   }
@@ -153,16 +256,18 @@ const initSheet = async () => {
       },
       onInsertColumnLeft: (ctx) => {
         if (ctx.position) {
-          const newCol = { key: `col_${Date.now()}`, title: '新列', width: 100 };
-          sheet?.insertColumn(ctx.position.col, newCol);
-          log(`在列 ${ctx.position.col + 1} 左侧插入`);
+          showCreateColumnDialog((newCol: Column) => {
+            sheet?.insertColumn(ctx.position!.col, newCol);
+            log(`在列 ${ctx.position!.col + 1} 左侧插入: ${newCol.title}`);
+          });
         }
       },
       onInsertColumnRight: (ctx) => {
         if (ctx.position) {
-          const newCol = { key: `col_${Date.now()}`, title: '新列', width: 100 };
-          sheet?.insertColumn(ctx.position.col + 1, newCol);
-          log(`在列 ${ctx.position.col + 1} 右侧插入`);
+          showCreateColumnDialog((newCol: Column) => {
+            sheet?.insertColumn(ctx.position!.col + 1, newCol);
+            log(`在列 ${ctx.position!.col + 1} 右侧插入: ${newCol.title}`);
+          });
         }
       },
       onDeleteColumn: (ctx) => {
@@ -200,18 +305,34 @@ const initSheet = async () => {
       },
       onInsertColumnLeft: (ctx) => {
         if (ctx.headerColIndex !== undefined) {
-          const newCol = { key: `col_${Date.now()}`, title: '新列', width: 100 };
-          sheet?.insertColumn(ctx.headerColIndex, newCol);
-          // 注意：sheet.insertColumn 会自动更新 columns 数组，不需要手动 splice
-          log(`在列 ${ctx.headerColIndex + 1} 左侧插入`);
+          const colIndex = ctx.headerColIndex;
+          showCreateColumnDialog((newCol: Column) => {
+            sheet?.insertColumn(colIndex, newCol);
+            log(`在列 ${colIndex + 1} 左侧插入: ${newCol.title}`);
+          });
         }
       },
       onInsertColumnRight: (ctx) => {
         if (ctx.headerColIndex !== undefined) {
-          const newCol = { key: `col_${Date.now()}`, title: '新列', width: 100 };
-          sheet?.insertColumn(ctx.headerColIndex + 1, newCol);
-          // 注意：sheet.insertColumn 会自动更新 columns 数组，不需要手动 splice
-          log(`在列 ${ctx.headerColIndex + 1} 右侧插入`);
+          const colIndex = ctx.headerColIndex;
+          showCreateColumnDialog((newCol: Column) => {
+            sheet?.insertColumn(colIndex + 1, newCol);
+            log(`在列 ${colIndex + 1} 右侧插入: ${newCol.title}`);
+          });
+        }
+      },
+      onEditColumn: (ctx) => {
+        if (ctx.headerColIndex !== undefined) {
+          const colIndex = ctx.headerColIndex;
+          const col = columns.value[colIndex];
+          if (col) {
+            showEditColumnDialog(col, (updatedCol: Column) => {
+              // 更新列配置
+              columns.value[colIndex] = updatedCol;
+              sheet?.setColumns(columns.value);
+              log(`编辑列配置: ${updatedCol.title}`);
+            });
+          }
         }
       },
       onDeleteColumn: (ctx) => {
@@ -440,11 +561,20 @@ const clearSearch = () => {
   search?.clear();
 };
 
-// 筛选
+// 筛选（部门值映射）
+const deptValueMap: Record<string, string> = {
+  '技术部': 'tech',
+  '产品部': 'product', 
+  '设计部': 'design',
+  '市场部': 'market',
+  '运营部': 'operation',
+};
+
 const applyFilter = () => {
   if (!filter) return;
   if (filterDepartment.value) {
-    filter.setConditions([FilterConditions.equals('department', filterDepartment.value)]);
+    const deptValue = deptValueMap[filterDepartment.value] || filterDepartment.value;
+    filter.setConditions([FilterConditions.equals('department', deptValue)]);
   } else {
     filter.clearFilter();
   }
@@ -468,13 +598,21 @@ const clearSort = () => {
 // 验证
 const validateAll = () => {
   if (!validator || !sheet) return;
+  
+  // 先清除所有验证错误
+  sheet.clearAllValidationErrors();
+  
   const data = sheet.getData();
   const result = validator.validateAll(data, columns.value);
+  
   if (result.valid) {
     log('✅ 数据验证通过');
   } else {
     log(`❌ 验证失败: ${result.errors.length} 个错误`);
+    
+    // 显示每个错误的高亮
     result.errors.forEach((err: any) => {
+      sheet!.setValidationError(err.row, err.col, err.message);
       log(`  - [${err.row + 1}, ${err.col + 1}]: ${err.message}`);
     });
   }

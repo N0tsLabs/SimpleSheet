@@ -7,6 +7,8 @@ import { EventEmitter } from '../core/EventEmitter';
 import type { CellEditor, CellEditorClass, Column, RowData, EditEvent } from '../types';
 import { TextEditor } from './TextEditor';
 import { NumberEditor } from './NumberEditor';
+import { DateEditor } from './DateEditor';
+import { SelectEditor } from './SelectEditor';
 import { createElement, setStyles } from '../utils/dom';
 
 interface EditorEvents {
@@ -45,6 +47,12 @@ export class EditorManager extends EventEmitter<EditorEvents> {
   private registerDefaultEditors(): void {
     this.editorTypes.set('text', TextEditor);
     this.editorTypes.set('number', NumberEditor);
+    this.editorTypes.set('date', DateEditor);
+    this.editorTypes.set('select', SelectEditor);
+    // 以下类型使用 TextEditor 作为默认编辑器
+    this.editorTypes.set('email', TextEditor);
+    this.editorTypes.set('phone', TextEditor);
+    this.editorTypes.set('link', TextEditor);
   }
 
   /**

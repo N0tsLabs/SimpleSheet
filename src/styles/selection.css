@@ -103,33 +103,42 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-.ss-fill-option {
+.ss-fill-options-menu .ss-fill-option {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
   cursor: pointer;
-  color: #333;
+  color: #333333 !important;
   transition: background-color 0.15s;
+  opacity: 1 !important;
 }
 
-.ss-fill-option:hover {
+.ss-fill-options-menu .ss-fill-option:hover {
   background-color: #f5f5f5;
+  color: #333333 !important;
 }
 
-.ss-fill-option-active {
+.ss-fill-options-menu .ss-fill-option-active {
   background-color: #e3f2fd;
-  color: #1976d2;
+  color: #1976d2 !important;
 }
 
-.ss-fill-option-active:hover {
+.ss-fill-options-menu .ss-fill-option-active:hover {
   background-color: #bbdefb;
+  color: #1976d2 !important;
 }
 
-.ss-fill-option-icon {
+.ss-fill-options-menu .ss-fill-option-icon {
   font-size: 14px;
   width: 20px;
   text-align: center;
+  opacity: 1 !important;
+}
+
+.ss-fill-options-menu .ss-fill-option-text {
+  color: inherit;
+  opacity: 1 !important;
 }
 
 .ss-fill-option-divider {
@@ -145,17 +154,18 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
-[data-theme="dark"] .ss-fill-option {
-  color: #e0e0e0;
+[data-theme="dark"] .ss-fill-options-menu .ss-fill-option {
+  color: #e0e0e0 !important;
 }
 
-[data-theme="dark"] .ss-fill-option:hover {
+[data-theme="dark"] .ss-fill-options-menu .ss-fill-option:hover {
   background-color: #3d3d3d;
+  color: #e0e0e0 !important;
 }
 
-[data-theme="dark"] .ss-fill-option-active {
+[data-theme="dark"] .ss-fill-options-menu .ss-fill-option-active {
   background-color: #1e3a5f;
-  color: #64b5f6;
+  color: #64b5f6 !important;
 }
 
 [data-theme="dark"] .ss-fill-option-active:hover {

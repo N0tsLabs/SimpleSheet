@@ -111,6 +111,20 @@ export interface Column {
   wrapText?: WrapTextMode;
   /** 是否可编辑 */
   editable?: boolean;
+  
+  // ===== 数字类型配置 =====
+  /** 小数位数（type 为 number 时使用） */
+  decimalPlaces?: number;
+  /** 数字前缀（如 ¥、$） */
+  numberPrefix?: string;
+  /** 数字后缀（如 %、元） */
+  numberSuffix?: string;
+  /** 是否使用千分位分隔符 */
+  useThousandSeparator?: boolean;
+  
+  // ===== 日期类型配置 =====
+  /** 日期格式（type 为 date 时使用） */
+  dateFormat?: string;
 }
 
 /**
@@ -119,6 +133,10 @@ export interface Column {
 export interface SelectOption {
   label: string;
   value: any;
+  /** 标签颜色（背景色） */
+  color?: string;
+  /** 文字颜色（可选，默认根据背景色自动计算） */
+  textColor?: string;
 }
 
 /**

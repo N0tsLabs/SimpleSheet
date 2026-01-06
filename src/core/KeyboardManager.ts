@@ -187,12 +187,15 @@ export class KeyboardManager extends EventEmitter<KeyboardEvents> {
     });
 
     // Ctrl+V 粘贴
+    // 注意：不阻止默认行为，让浏览器触发原生 paste 事件
+    // FilePasteHandler 可以通过 paste 事件接收文件
     this.register({
       key: 'v',
       ctrl: true,
       handler: () => {
         this.emit('paste', undefined);
       },
+      preventDefault: false,
     });
 
     // Ctrl+Z 撤销

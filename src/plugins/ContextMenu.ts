@@ -490,8 +490,16 @@ export function createHeaderMenuItems(handlers: {
   onShowAllColumns?: (context: MenuContext) => void;
   onSortAsc?: (context: MenuContext) => void;
   onSortDesc?: (context: MenuContext) => void;
+  onEditColumn?: (context: MenuContext) => void;
 }): MenuItem[] {
   return [
+    {
+      key: 'editColumn',
+      label: '编辑列配置',
+      icon: '⚙️',
+      action: (context) => handlers.onEditColumn?.(context),
+    },
+    { type: 'divider', label: '' },
     {
       key: 'copyColumn',
       label: '复制整列',

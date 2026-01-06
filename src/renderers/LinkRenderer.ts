@@ -9,33 +9,33 @@ import { createElement } from '../utils/dom';
 export class LinkRenderer extends BaseRenderer {
   render(cell: HTMLElement, value: any, rowData: RowData, column: Column): void {
     cell.innerHTML = '';
+    cell.classList.add('ss-cell-link-type');
 
     if (value === null || value === undefined || value === '') {
       return;
     }
 
-    const link = createElement('a', 'ss-cell-link');
+    const link = createElement('span', 'ss-cell-link');
+    
+    let url: string;
+    let displayText: string;
     
     // 支持对象格式 { url, text } 或纯字符串
     if (typeof value === 'object' && value.url) {
-      link.href = value.url;
-      link.textContent = value.text || value.url;
+      url = value.url;
+      displayText = value.text || value.url;
     } else {
-      const url = String(value);
-      link.href = url;
-      link.textContent = url;
+      url = String(value);
+      displayText = url;
     }
 
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    
-    // 阻止链接点击时触发单元格选择
-    link.addEventListener('click', (e) => {
-      e.stopPropagation();
-    });
+    link.textContent = displayText;
+    link.setAttribute('data-url', url);
+    link.setAttribute('data-type', 'link');
+    link.setAttribute('data-display', displayText);
 
     cell.appendChild(link);
-    cell.title = link.href;
+    cell.title = url;
   }
 }
 

@@ -273,6 +273,38 @@
    文件渲染器样式
    ======================================== */
 
+/* 文件类型单元格标记 */
+.ss-cell-file-type {
+  position: relative;
+}
+
+/* 文件占位提示 */
+.ss-cell-file-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ss-text-secondary, #9ca3af);
+  font-size: 12px;
+  padding: 0 4px;
+}
+
+.ss-file-placeholder-icon {
+  font-size: 14px;
+  opacity: 0.6;
+}
+
+.ss-file-placeholder-text {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+/* 选中时显示提示文字 */
+.ss-cell.selected .ss-file-placeholder-text,
+.ss-cell:focus .ss-file-placeholder-text,
+.ss-cell-file-placeholder:hover .ss-file-placeholder-text {
+  opacity: 1;
+}
+
 .ss-cell-files {
   display: flex;
   flex-wrap: wrap;
@@ -349,5 +381,117 @@
   border-radius: 9px;
   flex-shrink: 0;
   cursor: help;
+}
+
+/* ========================================
+   选择/标签渲染器样式
+   ======================================== */
+
+.ss-cell-select {
+  padding: 2px 4px;
+  position: relative;
+}
+
+/* 标签容器 */
+.ss-select-tags {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+/* 溢出时的渐变遮罩 */
+.ss-select-overflow .ss-select-tags::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 30px;
+  background: linear-gradient(to right, transparent, var(--ss-cell-bg, #fff));
+  pointer-events: none;
+}
+
+[data-theme="dark"] .ss-select-overflow .ss-select-tags::after {
+  background: linear-gradient(to right, transparent, var(--ss-cell-bg, #1a1a2e));
+}
+
+/* 单个标签 */
+.ss-select-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+/* 普通标签（无颜色配置） */
+.ss-select-tag-plain {
+  background: var(--ss-header-bg, #f3f4f6);
+  color: var(--ss-text-color, #374151);
+  border: 1px solid var(--ss-border-color, #e5e7eb);
+}
+
+/* 暗色主题下的标签 */
+[data-theme="dark"] .ss-select-tag-plain {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e0e0e0;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* 标签悬停效果 */
+.ss-select-tag:hover {
+  filter: brightness(0.95);
+}
+
+/* 溢出省略指示器 */
+.ss-select-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ss-text-secondary, #6b7280);
+  background: var(--ss-header-bg, #f3f4f6);
+  border-radius: 4px;
+  flex-shrink: 0;
+  cursor: help;
+  position: relative;
+  z-index: 1;
+}
+
+[data-theme="dark"] .ss-select-more {
+  background: rgba(255, 255, 255, 0.1);
+  color: #aaa;
+}
+
+/* 可点击的标签容器 */
+.ss-select-tags-clickable {
+  cursor: pointer;
+}
+
+.ss-select-tags-clickable:hover {
+  opacity: 0.85;
+}
+
+/* 圆形标签变体 */
+.ss-select-tag-rounded {
+  border-radius: 12px;
+  padding: 2px 10px;
+}
+
+/* 紧凑标签 */
+.ss-select-tag-compact {
+  padding: 1px 6px;
+  font-size: 11px;
 }
 
