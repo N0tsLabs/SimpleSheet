@@ -27,7 +27,7 @@
     "typescript",
     "vanilla"
   ],
-  "author": "",
+  "author": "n0ts123",
   "license": "MIT",
   "devDependencies": {
     "@rollup/plugin-typescript": "^11.1.6",
@@ -40,8 +40,12 @@
   },
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "https://github.com/N0tsLabs/SimpleSheet.git"
   },
+  "bugs": {
+    "url": "https://github.com/N0tsLabs/SimpleSheet/issues"
+  },
+  "homepage": "https://github.com/N0tsLabs/SimpleSheet#readme",
   "publishConfig": {
     "access": "public"
   }
