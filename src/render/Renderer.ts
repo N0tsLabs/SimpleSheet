@@ -16,7 +16,7 @@ import {
   CheckboxRenderer,
   FileRenderer,
 } from '../renderers';
-import { createElement, setStyles, classNames } from '../utils/dom';
+import { createElement, setStyles, classNames, rafThrottle } from '../utils/dom';
 import { columnIndexToLetter } from '../utils/helpers';
 
 interface RendererOptions {
@@ -27,6 +27,7 @@ interface RendererOptions {
   showRowNumber: boolean;
   rowNumberWidth: number;
   virtualScrollBuffer: number;
+  verticalPadding?: number;
 }
 
 export class Renderer {
@@ -48,6 +49,9 @@ export class Renderer {
   
   /** 行 DOM 缓存 */
   private rowCache: Map<number, HTMLElement> = new Map();
+  
+  /** 每行的实际高度缓存（用于行高自适应） */
+  private rowHeights: Map<number, number> = new Map();
   
   /** 渲染器实例缓存 */
   private rendererCache: Map<string, CellRenderer> = new Map();
@@ -83,6 +87,9 @@ export class Renderer {
       buffer: options.virtualScrollBuffer,
       rowNumberWidth: options.rowNumberWidth,
       showRowNumber: options.showRowNumber,
+      getTotalHeight: () => this.getTotalHeight(),
+      getRowOffset: (rowIndex: number) => this.getRowOffset(rowIndex),
+      getRowIndexFromY: (y: number) => this.getRowIndexFromY(y),
     });
     
     this.init();
@@ -285,11 +292,14 @@ export class Renderer {
   private updateContainerStyles(): void {
     const totalWidth = this.virtualScroll.getTotalWidth();
     const totalHeight = this.virtualScroll.getTotalHeight();
+    const verticalPadding = this.options.verticalPadding || 0;
     
     if (this.bodyContent) {
       setStyles(this.bodyContent, {
         width: `${totalWidth}px`,
         height: `${totalHeight}px`,
+        paddingTop: `${verticalPadding}px`,
+        paddingBottom: `${verticalPadding}px`,
       });
     }
     
@@ -342,11 +352,23 @@ export class Renderer {
       cell.textContent = col.title || columnIndexToLetter(index);
       cell.title = col.title || columnIndexToLetter(index);
       
-      setStyles(cell, {
+      const cellStyles: Record<string, string> = {
         width: `${col.width ?? 100}px`,
         height: `${this.options.headerHeight}px`,
         textAlign: col.align || 'center',
-      });
+      };
+      
+      // 应用表头背景颜色
+      if (col.headerBgColor) {
+        cellStyles.backgroundColor = col.headerBgColor;
+      }
+      
+      // 应用表头文字颜色
+      if (col.headerTextColor) {
+        cellStyles.color = col.headerTextColor;
+      }
+      
+      setStyles(cell, cellStyles);
       
       // 列宽调整手柄
       if (col.resizable !== false) {
@@ -364,20 +386,85 @@ export class Renderer {
    */
   render(): void {
     const state = this.virtualScroll.getState();
-    this.renderRows(state);
+    // 确保状态有效
+    if (state.startRow >= 0 && state.endRow >= state.startRow) {
+      this.renderRows(state);
+    }
+  }
+
+  /** updateRowPositions 的防抖版本 */
+  private updateRowPositionsDebounced: (() => void) | null = null;
+
+  /**
+   * 更新所有行的位置（用于行高自适应后避免重叠）
+   */
+  private updateRowPositions(): void {
+    // 使用防抖优化性能，避免频繁更新
+    if (!this.updateRowPositionsDebounced) {
+      this.updateRowPositionsDebounced = rafThrottle(() => {
+        let currentTop = 0;
+        
+        // 遍历所有已渲染的行，按顺序更新位置
+        const sortedRows = Array.from(this.rowCache.entries()).sort((a, b) => a[0] - b[0]);
+        
+        for (const [rowIndex, row] of sortedRows) {
+          const rowHeight = this.rowHeights.get(rowIndex) || this.options.rowHeight;
+          setStyles(row, {
+            transform: `translateY(${currentTop}px)`,
+          });
+          currentTop += rowHeight;
+        }
+        
+        // 更新虚拟滚动的总高度
+        this.updateContainerStyles();
+        
+        // 重新计算虚拟滚动状态（因为总高度可能变化了）
+        this.virtualScroll.update({});
+      });
+    }
+    
+    this.updateRowPositionsDebounced();
   }
 
   /**
    * 渲染行
+   * 核心策略：
+   * 1. 使用固定行高估算可视区域（避免循环依赖）
+   * 2. 渲染这些行并测量实际行高
+   * 3. 根据实际行高调整位置
+   * 4. 如果发现可视区域需要扩展（因为行高比预期大），再扩展渲染范围
    */
   private renderRows(state: VirtualScrollState): void {
     if (!this.bodyContent || !this.getDataFn || !this.getRowDataFn) return;
     
+    // 确保 startRow 和 endRow 有效
+    let startRow = Math.max(0, Math.min(state.startRow, this.options.rowCount - 1));
+    let endRow = Math.max(startRow, Math.min(state.endRow, this.options.rowCount - 1));
+    
+    // 如果没有数据，不渲染
+    if (this.options.rowCount === 0 || startRow >= this.options.rowCount) {
+      return;
+    }
+    
+    // 先计算所有行的累计高度（使用已缓存的行高，未缓存的用默认值）
+    let currentTop = 0;
+    for (let i = 0; i < startRow; i++) {
+      const rowHeight = this.rowHeights.get(i) || this.options.rowHeight;
+      currentTop += rowHeight;
+    }
+    
     // 标记所有现有行为未使用
     const usedRows = new Set<number>();
     
-    // 渲染可见行
-    for (let rowIndex = state.startRow; rowIndex <= state.endRow; rowIndex++) {
+    // 第一遍：先创建/获取所有需要的行，确保它们都存在
+    // 关键优化：先创建新行，再移除旧行，避免滚动时空白
+    const rowsToRender: Array<{ rowIndex: number; row: HTMLElement }> = [];
+    for (let rowIndex = startRow; rowIndex <= endRow; rowIndex++) {
+      // 确保行索引有效
+      if (rowIndex < 0 || rowIndex >= this.options.rowCount) {
+        continue;
+      }
+      
       usedRows.add(rowIndex);
       let row = this.rowCache.get(rowIndex);
       
@@ -385,27 +472,152 @@ export class Renderer {
         row = this.createRow(rowIndex);
         this.rowCache.set(rowIndex, row);
         this.bodyContent.appendChild(row);
+        // 初始化默认行高
+        this.rowHeights.set(rowIndex, this.options.rowHeight);
       }
       
-      // 更新行位置
-      const top = this.virtualScroll.getRowOffset(rowIndex);
+      // 先设置位置和显示状态（使用缓存的行高），避免滚动时空白
+      const cachedHeight = this.rowHeights.get(rowIndex) || this.options.rowHeight;
+      // 关键：立即显示行，确保滚动时不会出现空白
       setStyles(row, {
-        transform: `translateY(${top}px)`,
+        display: '',
+        transform: `translateY(${currentTop}px)`,
+        height: `${cachedHeight}px`,
+        visibility: 'visible', // 确保可见
+        opacity: '1', // 确保不透明
       });
       
-      // 渲染行内的单元格
-      this.renderRowCells(row, rowIndex, state);
+      rowsToRender.push({ rowIndex, row });
+      
+      // 更新累计高度（使用缓存的行高）
+      currentTop += cachedHeight;
     }
     
-    // 移除不可见的行
+    // 第二遍：渲染所有行的内容并更新位置
+    // 这样可以确保所有行都已经存在且可见，然后再渲染内容
+    // 重新计算累计高度（基于实际行高）
+    let recalculatedTop = 0;
+    for (let i = 0; i < startRow; i++) {
+      recalculatedTop += this.rowHeights.get(i) || this.options.rowHeight;
+    }
+    
+    for (const { rowIndex, row } of rowsToRender) {
+      // 渲染单元格内容（这样才能知道实际行高）
+      this.renderRowCells(row, rowIndex, state);
+      
+      // 使用实际行高更新位置
+      const actualRowHeight = this.rowHeights.get(rowIndex) || this.options.rowHeight;
+      
+      // 关键：使用 will-change 优化性能，避免滚动时闪烁
+      setStyles(row, {
+        transform: `translateY(${recalculatedTop}px)`,
+        height: `${actualRowHeight}px`,
+        willChange: 'transform', // 提示浏览器优化
+      });
+      
+      // 更新累计高度
+      recalculatedTop += actualRowHeight;
+    }
+    
+    // 更新累计高度（用于后续扩展渲染范围的计算）
+    currentTop = recalculatedTop;
+    
+    // 第二遍：检查是否需要扩展渲染范围
+    // 如果某些行的实际高度远大于默认高度，可能需要渲染更多行来填满可视区域
+    const scrollTop = this.virtualScroll.getScrollTop();
+    // 获取视口高度（通过容器元素）
+    const containerRect = this.container?.getBoundingClientRect();
+    const viewportHeight = (containerRect?.height || 0) - this.options.headerHeight;
+    const bottomY = scrollTop + viewportHeight;
+    
+    // 计算当前渲染范围的实际底部位置
+    let actualBottom = currentTop;
+    
+    // 如果实际底部位置小于可视区域底部，需要扩展渲染范围
+    if (actualBottom < bottomY && endRow < this.options.rowCount - 1) {
+      // 扩展渲染范围，直到填满可视区域
+      let extendedEndRow = endRow;
+      while (actualBottom < bottomY && extendedEndRow < this.options.rowCount - 1) {
+        extendedEndRow++;
+        const extendedRowIndex = extendedEndRow;
+        
+        if (extendedRowIndex < 0 || extendedRowIndex >= this.options.rowCount) {
+          break;
+        }
+        
+        usedRows.add(extendedRowIndex);
+        let extendedRow = this.rowCache.get(extendedRowIndex);
+        
+        if (!extendedRow) {
+          extendedRow = this.createRow(extendedRowIndex);
+          this.rowCache.set(extendedRowIndex, extendedRow);
+          this.bodyContent.appendChild(extendedRow);
+          this.rowHeights.set(extendedRowIndex, this.options.rowHeight);
+        }
+        
+        // 先设置位置和显示状态，避免空白
+        const cachedExtendedHeight = this.rowHeights.get(extendedRowIndex) || this.options.rowHeight;
+        setStyles(extendedRow, {
+          display: '',
+          transform: `translateY(${actualBottom}px)`,
+          height: `${cachedExtendedHeight}px`,
+          visibility: 'visible',
+          opacity: '1',
+        });
+        
+        // 渲染单元格内容
+        this.renderRowCells(extendedRow, extendedRowIndex, state);
+        
+        // 计算位置（使用实际行高）
+        const extendedRowHeight = this.rowHeights.get(extendedRowIndex) || this.options.rowHeight;
+        setStyles(extendedRow, {
+          transform: `translateY(${actualBottom}px)`,
+          height: `${extendedRowHeight}px`,
+        });
+        
+        actualBottom += extendedRowHeight;
+      }
+      
+      endRow = extendedEndRow;
+    }
+    
+    // 移除不可见的行（在最后执行，确保新行已经渲染完成）
+    // 关键优化：不要立即移除行，而是保留更多行的DOM，只隐藏它们
+    // 这样可以避免滚动时出现空白，因为行可能很快又会需要
+    const rowsToHide: Array<{ rowIndex: number; row: HTMLElement }> = [];
     for (const [rowIndex, row] of this.rowCache) {
       if (!usedRows.has(rowIndex)) {
-        row.remove();
-        this.rowCache.delete(rowIndex);
+        // 计算行距离可视区域的距离
+        const rowTop = this.getRowOffset(rowIndex);
+        const rowBottom = rowTop + (this.rowHeights.get(rowIndex) || this.options.rowHeight);
+        const scrollTop = this.virtualScroll.getScrollTop();
+        const containerRect = this.container?.getBoundingClientRect();
+        const viewportHeight = (containerRect?.height || 0) - this.options.headerHeight;
+        const viewportBottom = scrollTop + viewportHeight;
         
-        // 同时清理该行的单元格缓存
-        for (let col = 0; col < this.options.columns.length; col++) {
-          this.cellCache.delete(`${rowIndex}:${col}`);
+        // 如果行距离可视区域太远（超过2个视口高度），才移除
+        const distanceThreshold = viewportHeight * 2;
+        const isFarAway = (rowBottom < scrollTop - distanceThreshold) || (rowTop > viewportBottom + distanceThreshold);
+        
+        if (isFarAway) {
+          // 距离太远，可以移除
+          row.remove();
+          this.rowCache.delete(rowIndex);
+          
+          // 同时清理该行的单元格缓存
+          for (let col = 0; col < this.options.columns.length; col++) {
+            this.cellCache.delete(`${rowIndex}:${col}`);
+          }
+        } else {
+          // 距离不远，只隐藏，不移除（保留DOM，避免滚动回来时重新创建）
+          // 但保持位置，这样滚动回来时可以立即显示
+          const rowTop = this.getRowOffset(rowIndex);
+          const cachedHeight = this.rowHeights.get(rowIndex) || this.options.rowHeight;
+          setStyles(row, {
+            display: 'none',
+            transform: `translateY(${rowTop}px)`, // 保持位置
+            height: `${cachedHeight}px`,
+          });
         }
       }
     }
@@ -446,6 +658,7 @@ export class Renderer {
         setStyles(rowNumberCell, {
           width: `${this.options.rowNumberWidth}px`,
           height: `${this.options.rowHeight}px`,
+          minHeight: `${this.options.rowHeight}px`, // 确保最小高度
         });
         row.insertBefore(rowNumberCell, row.firstChild);
       }
@@ -454,9 +667,16 @@ export class Renderer {
     
     // 数据单元格
     for (let colIndex = state.startCol; colIndex <= state.endCol; colIndex++) {
-      // 检查列是否隐藏
+      // 确保列索引有效
+      if (colIndex < 0 || colIndex >= this.options.columns.length) {
+        continue;
+      }
+      
+      // 检查列是否隐藏（只有在明确返回 undefined 且 rowData 为空时才跳过）
       if (this.getDataFn) {
         const testValue = this.getDataFn(rowIndex, colIndex);
+        // 注意：即使 testValue 是 undefined，如果 rowData 不为空，也应该渲染
+        // 因为某些列可能确实没有值，但不应该被隐藏
         if (testValue === undefined && Object.keys(rowData).length === 0) {
           // 列被隐藏，跳过
           continue;
@@ -475,26 +695,121 @@ export class Renderer {
         // 因为插入/删除列后，colIndex 对应的实际位置会变化
         // 使用 getColumnOffsetDirect 确保与选区框计算一致
         const column = this.options.columns[colIndex];
-        const left = this.getColumnOffsetDirect(colIndex);
-        setStyles(cell, {
-          width: `${column?.width ?? 100}px`,
-          left: `${left}px`,
-        });
+        if (column) {
+          const left = this.getColumnOffsetDirect(colIndex);
+          setStyles(cell, {
+            width: `${column.width ?? 100}px`,
+            left: `${left}px`,
+            // 关键修复：不在这里设置边框，完全依赖 CSS 类
+          });
+          
+          // 确保单元格有边框类
+          if (!cell.classList.contains('ss-cell')) {
+            cell.classList.add('ss-cell');
+          }
+        }
       }
       
-      // 更新单元格内容
+      // 更新单元格内容（无论是否是新创建的）
       this.renderCell(cell, rowIndex, colIndex, rowData);
     }
     
-    // 移除不可见的单元格
+    // 行高自适应：检查该行所有单元格的最大高度
+    // 关键修复：在移除不可见单元格之前计算行高，确保所有可见单元格都被考虑
+    // 策略：同步计算行高并存储，立即更新位置
+    // 这样可以确保虚拟滚动能立即使用正确的行高
+    
+    let maxHeight = this.options.rowHeight;
+    // 获取当前行中所有已渲染的单元格（包括即将被移除的）
+    const allRowCells = row.querySelectorAll('.ss-cell:not(.ss-row-number)');
+    
+    // 优先使用 data-needed-height（这是渲染器预先计算的）
+    allRowCells.forEach(cellEl => {
+      const neededHeight = cellEl.getAttribute('data-needed-height');
+      if (neededHeight) {
+        const height = parseFloat(neededHeight);
+        if (!isNaN(height) && height > maxHeight) {
+          maxHeight = height;
+        }
+      }
+    });
+    
+    // 如果还没有 data-needed-height，使用实际高度（fallback）
+    if (maxHeight === this.options.rowHeight && allRowCells.length > 0) {
+      allRowCells.forEach(cellEl => {
+        const actualHeight = (cellEl as HTMLElement).scrollHeight;
+        if (actualHeight > maxHeight) {
+          maxHeight = actualHeight;
+        }
+      });
+    }
+    
+    // 立即存储行的实际高度到缓存（确保虚拟滚动能使用）
+    const oldHeight = this.rowHeights.get(rowIndex);
+    this.rowHeights.set(rowIndex, maxHeight);
+    
+    // 更新行高样式
+    setStyles(row, {
+      height: `${maxHeight}px`,
+    });
+    
+    // 同时更新行号单元格的高度
+    const rowNumberCell = row.querySelector('.ss-row-number') as HTMLElement;
+    if (rowNumberCell) {
+      setStyles(rowNumberCell, {
+        height: `${maxHeight}px`,
+        minHeight: `${maxHeight}px`, // 确保最小高度
+      });
+    }
+    
+    // 关键修复：更新该行所有单元格的高度（包括即将被移除的）
+    // 这样可以确保所有单元格都有正确的高度，防止边框缺失
+    allRowCells.forEach(cellEl => {
+      const cell = cellEl as HTMLElement;
+      setStyles(cell, {
+        height: `${maxHeight}px`,
+        minHeight: `${maxHeight}px`, // 确保最小高度，防止边框缺失
+        // 关键修复：不在这里设置边框，完全依赖 CSS 类
+      });
+      
+      // 确保单元格有边框类
+      if (!cell.classList.contains('ss-cell')) {
+        cell.classList.add('ss-cell');
+      }
+    });
+    
+    // 移除不可见的单元格（在更新高度之后）
+    // 这样可以确保即使单元格即将被移除，它们也有正确的高度，不会影响边框显示
     const cells = row.querySelectorAll('.ss-cell:not(.ss-row-number)');
     cells.forEach(cell => {
       const colIndex = parseInt((cell as HTMLElement).dataset.col || '-1', 10);
       if (colIndex < state.startCol || colIndex > state.endCol) {
+        // 在移除之前，确保单元格有正确的高度（防止边框缺失）
+        setStyles(cell as HTMLElement, {
+          height: `${maxHeight}px`,
+          minHeight: `${maxHeight}px`,
+        });
         cell.remove();
         this.cellCache.delete(`${rowIndex}:${colIndex}`);
       }
     });
+    
+    // 如果行高变化了，需要更新所有行的位置
+    // 关键：当前行的位置已经在 renderRows 中更新了
+    // 其他行的位置更新延迟到滚动停止后，避免滚动时闪烁
+    if (oldHeight !== undefined && Math.abs(maxHeight - oldHeight) > 0.1) {
+      // 延迟更新其他行的位置，避免滚动时闪烁
+      // 当前行的位置已经在 renderRows 中更新了，不需要立即更新所有行
+      if (!this.updateRowPositionsDebounced) {
+        this.updateRowPositionsDebounced = rafThrottle(() => {
+          this.updateRowPositions();
+          // 重新计算虚拟滚动状态（可能会扩展可视区域）
+          this.virtualScroll.update({});
+        });
+      }
+      // 只在滚动停止后更新（通过 scrollend 事件触发），避免滚动时闪烁
+      // 滚动过程中不更新位置，因为 renderRows 已经处理了当前可见行的位置
+    }
   }
 
   /**
@@ -512,9 +827,15 @@ export class Renderer {
     setStyles(cell, {
       width: `${column?.width ?? 100}px`,
       height: `${this.options.rowHeight}px`,
+      minHeight: `${this.options.rowHeight}px`, // 确保最小高度，防止边框缺失
       left: `${left}px`,
       textAlign: column?.align || 'left',
+      // 关键修复：不在这里设置边框，完全依赖 CSS 类，确保边框始终显示
+      // 边框由 .ss-cell 类的 CSS 定义，不需要内联样式
     });
+    
+    // 确保单元格有边框类（通过 CSS 类控制边框，而不是内联样式）
+    cell.classList.add('ss-cell');
     
     return cell;
   }
@@ -537,11 +858,19 @@ export class Renderer {
     // 获取或创建渲染器
     const renderer = this.getRenderer(column);
     
-    // 清空单元格
-    cell.textContent = '';
+    // 检查是否有预览状态（避免重新渲染时丢失预览）
+    const hasPreview = cell.classList.contains('ss-cell-preview-expanded') || 
+                      cell.querySelector('.ss-cell-preview-content');
     
-    // 渲染内容
-    renderer.render(cell, value, rowData, column);
+    // 清空单元格（但保留预览状态）
+    if (!hasPreview) {
+      cell.textContent = '';
+    }
+    
+    // 渲染内容（如果有预览状态，跳过渲染以避免覆盖预览内容）
+    if (!hasPreview) {
+      renderer.render(cell, value, rowData, column);
+    }
     
     // 应用只读样式（只有当明确设置为 true 时才应用）
     const isReadonly = column.readonly === true || meta?.readonly === true;
@@ -637,20 +966,54 @@ export class Renderer {
     selectedCells: Array<{ row: number; col: number }>,
     activeCell: { row: number; col: number } | null
   ): void {
-    // 清除旧选区
-    this.selectedCells.clear();
-    
-    // 设置新选区
+    // 计算新旧选区的差异，只更新变化的单元格
+    const newSelectedSet = new Set<string>();
     for (const cell of selectedCells) {
-      this.selectedCells.add(`${cell.row}:${cell.col}`);
+      newSelectedSet.add(`${cell.row}:${cell.col}`);
     }
     
+    // 移除不再选中的单元格的选中样式
+    for (const cellKey of this.selectedCells) {
+      if (!newSelectedSet.has(cellKey)) {
+        const [row, col] = cellKey.split(':').map(Number);
+        const cell = this.cellCache.get(cellKey);
+        if (cell) {
+          cell.classList.remove('ss-cell-selected', 'ss-cell-active');
+        }
+      }
+    }
+    
+    // 添加新选中单元格的选中样式
+    for (const cellKey of newSelectedSet) {
+      if (!this.selectedCells.has(cellKey)) {
+        const [row, col] = cellKey.split(':').map(Number);
+        const cell = this.cellCache.get(cellKey);
+        if (cell) {
+          cell.classList.add('ss-cell-selected');
+        }
+      }
+    }
+    
+    // 更新活动单元格样式
+    // 先清除所有活动单元格样式
+    for (const cell of this.cellCache.values()) {
+      cell.classList.remove('ss-cell-active');
+    }
+    
+    // 设置新的活动单元格样式
+    if (activeCell) {
+      const activeCellKey = `${activeCell.row}:${activeCell.col}`;
+      const activeCellEl = this.cellCache.get(activeCellKey);
+      if (activeCellEl) {
+        activeCellEl.classList.add('ss-cell-active');
+      }
+    }
+    
+    // 更新内部状态
+    this.selectedCells = newSelectedSet;
     this.activeCell = activeCell;
     
-    // 重新渲染以更新选区样式
-    this.render();
-    
-    // 更新选区边框层
+    // 更新选区边框层（不重新渲染整个表格）
     this.renderSelectionBorder(selectedCells, activeCell);
   }
 
@@ -717,9 +1080,12 @@ export class Renderer {
     const left = minColRect.left - rootRect.left;
     const width = maxColRect.right - minColRect.left;
     
-    // 垂直位置通过计算获取
-    const top = this.virtualScroll.getRowOffset(minRow) + this.options.headerHeight - scrollTop;
-    const height = (maxRow - minRow + 1) * this.options.rowHeight;
+    // 垂直位置通过计算获取（使用实际行高）
+    const top = this.getRowOffset(minRow) + this.options.headerHeight - scrollTop;
+    let height = 0;
+    for (let i = minRow; i <= maxRow; i++) {
+      height += this.getRowHeight(i);
+    }
     
     this.selectionBox = createElement('div', 'ss-selection-box');
     setStyles(this.selectionBox, {
@@ -735,7 +1101,11 @@ export class Renderer {
    * 处理虚拟滚动变化
    */
   private handleVirtualScrollChange(state: VirtualScrollState): void {
-    this.renderRows(state);
+    // 确保状态有效
+    if (state.startRow >= 0 && state.endRow >= state.startRow) {
+      // 即使 endRow 超出范围，也要渲染（可能是计算误差）
+      this.renderRows(state);
+    }
   }
 
   /**
@@ -806,6 +1176,7 @@ export class Renderer {
     }
     this.rowCache.clear();
     this.cellCache.clear();
+    this.rowHeights.clear(); // 清除行高缓存
   }
 
   /**
@@ -824,6 +1195,41 @@ export class Renderer {
   /**
    * 根据坐标获取单元格位置
    */
+  /**
+   * 根据 Y 坐标获取行索引（使用实际行高）
+   */
+  getRowIndexFromY(y: number): number {
+    // 如果 y 小于 0，返回第一行
+    if (y < 0) {
+      return 0;
+    }
+    
+    let currentOffset = 0;
+    for (let i = 0; i < this.options.rowCount; i++) {
+      const rowHeight = this.rowHeights.get(i) || this.options.rowHeight;
+      const nextOffset = currentOffset + rowHeight;
+      
+      // 如果 y 在当前行的范围内（包括起始位置，不包括结束位置）
+      if (y >= currentOffset && y < nextOffset) {
+        return i;
+      }
+      
+      // 如果 y 正好等于下一行的起始位置，返回下一行（如果存在）
+      if (y === nextOffset && i < this.options.rowCount - 1) {
+        return i + 1;
+      }
+      
+      // 如果 y 已经超过当前行的结束位置，继续查找下一行
+      if (y >= nextOffset) {
+        currentOffset = nextOffset;
+        continue;
+      }
+    }
+    
+    // 如果超出范围，返回最后一行
+    return Math.max(0, this.options.rowCount - 1);
+  }
+
   getCellFromPoint(x: number, y: number): { row: number; col: number } | null {
     if (!this.scrollContainer) return null;
     
@@ -836,7 +1242,8 @@ export class Renderer {
     
     if (adjustedY < 0) return null;
     
-    const row = this.virtualScroll.getRowIndexFromY(adjustedY);
+    // 使用实际行高计算行索引
+    const row = this.getRowIndexFromY(adjustedY);
     const col = this.virtualScroll.getColumnIndexFromX(adjustedX);
     
     if (row < 0 || row >= this.options.rowCount || col < 0) {
@@ -865,11 +1272,12 @@ export class Renderer {
     
     const rootRect = this.root.getBoundingClientRect();
     
-    const top = this.virtualScroll.getRowOffset(row) + this.options.headerHeight - scrollTop;
+    // 使用实际行高计算位置
+    const top = this.getRowOffset(row) + this.options.headerHeight - scrollTop;
     // 使用 getColumnOffsetDirect 确保与单元格和选区框计算一致
     const left = this.getColumnOffsetDirect(col) - scrollLeft;
     const width = this.options.columns[col]?.width ?? 100;
-    const height = this.options.rowHeight;
+    const height = this.getRowHeight(row);
     
     return new DOMRect(
       rootRect.left + left,
@@ -880,10 +1288,80 @@ export class Renderer {
   }
 
   /**
-   * 滚动到指定单元格
+   * 获取总高度（考虑自适应行高）
+   */
+  getTotalHeight(): number {
+    let totalHeight = 0;
+    for (let i = 0; i < this.options.rowCount; i++) {
+      const rowHeight = this.rowHeights.get(i) || this.options.rowHeight;
+      totalHeight += rowHeight;
+    }
+    return totalHeight;
+  }
+
+  /**
+   * 获取行的实际偏移量（考虑自适应行高）
+   */
+  getRowOffset(rowIndex: number): number {
+    let offset = 0;
+    for (let i = 0; i < rowIndex; i++) {
+      const rowHeight = this.rowHeights.get(i) || this.options.rowHeight;
+      offset += rowHeight;
+    }
+    return offset;
+  }
+
+  /**
+   * 获取行的实际高度（考虑自适应行高）
+   */
+  getRowHeight(rowIndex: number): number {
+    return this.rowHeights.get(rowIndex) || this.options.rowHeight;
+  }
+
+  /**
+   * 滚动到指定单元格（使用实际行高）
    */
   scrollToCell(row: number, col: number): void {
-    this.virtualScroll.scrollToCell(row, col);
+    if (!this.scrollContainer || !this.root) return;
+    
+    const viewportRect = this.root.getBoundingClientRect();
+    const viewportHeight = viewportRect.height - this.options.headerHeight;
+    const viewportWidth = viewportRect.width;
+    
+    const cellTop = this.getRowOffset(row);
+    const cellLeft = this.getColumnOffsetDirect(col);
+    const cellWidth = this.options.columns[col]?.width ?? 100;
+    const cellHeight = this.getRowHeight(row);
+    const cellBottom = cellTop + cellHeight;
+    const cellRight = cellLeft + cellWidth;
+    
+    const scrollTop = this.scrollContainer.scrollTop;
+    const scrollLeft = this.scrollContainer.scrollLeft;
+    
+    let newScrollTop = scrollTop;
+    let newScrollLeft = scrollLeft;
+    
+    // 垂直方向
+    if (cellTop < scrollTop) {
+      newScrollTop = cellTop;
+    } else if (cellBottom > scrollTop + viewportHeight) {
+      newScrollTop = cellBottom - viewportHeight;
+    }
+    
+    // 水平方向
+    if (cellLeft < scrollLeft) {
+      newScrollLeft = cellLeft;
+    } else if (cellRight > scrollLeft + viewportWidth) {
+      newScrollLeft = cellRight - viewportWidth;
+    }
+    
+    if (newScrollTop !== scrollTop || newScrollLeft !== scrollLeft) {
+      this.scrollContainer.scrollTo({
+        top: newScrollTop,
+        left: newScrollLeft,
+        behavior: 'smooth',
+      });
+    }
   }
 
   /**

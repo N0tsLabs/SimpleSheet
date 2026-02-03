@@ -48,6 +48,7 @@ export { TagRenderer } from './renderers/TagRenderer';
 export { ProgressRenderer } from './renderers/ProgressRenderer';
 export { RatingRenderer } from './renderers/RatingRenderer';
 export { CheckboxRenderer } from './renderers/CheckboxRenderer';
+export { ButtonRenderer } from './renderers/ButtonRenderer';
 export { EmailRenderer } from './renderers/EmailRenderer';
 export { PhoneRenderer } from './renderers/PhoneRenderer';
 export { MultiLinkRenderer } from './renderers/MultiLinkRenderer';
@@ -107,4 +108,8 @@ export {
   getCellAddress,
   parseCellAddress,
 } from './utils/helpers';
+
+// 导出提示组件
+export { Toast, showToast } from './utils/Toast';
+export type { ToastType, ToastOptions } from './utils/Toast';
 

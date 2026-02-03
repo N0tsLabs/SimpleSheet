@@ -13,8 +13,8 @@
   --ss-error-color: #ef4444;
 
   /* 间距 */
-  --ss-cell-padding: 8px 12px;
-  --ss-header-padding: 8px 12px;
+  --ss-cell-padding: 1px 6px; /* 进一步压缩上下边距，让表格更紧凑 */
+  --ss-header-padding: 6px 10px; /* 表头内边距也相应减小 */
   
   /* 尺寸 */
   --ss-border-radius: 0;
@@ -57,8 +57,8 @@
   --ss-row-bg-hover: #f9fafb;
   --ss-row-bg-alt: #fafafa;
   
-  /* 边框色 */
-  --ss-border-color: #e5e7eb;
+  /* 边框色 - 还原为更柔和的颜色 */
+  --ss-border-color: #e5e7eb; /* 还原为更浅的边框颜色 */
   --ss-border-color-light: #f3f4f6;
   --ss-border-color-dark: #d1d5db;
   

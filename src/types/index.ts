@@ -109,8 +109,16 @@ export interface Column {
   options?: SelectOption[];
   /** 多行文本显示模式 */
   wrapText?: WrapTextMode;
+  /** 最大显示行数（超过此行数显示省略号），仅在 wrapText 为 'wrap' 时生效 */
+  maxLines?: number;
   /** 是否可编辑 */
   editable?: boolean;
+  
+  // ===== 表头样式配置 =====
+  /** 表头背景颜色 */
+  headerBgColor?: string;
+  /** 表头文字颜色 */
+  headerTextColor?: string;
   
   // ===== 数字类型配置 =====
   /** 小数位数（type 为 number 时使用） */
@@ -243,6 +251,21 @@ export interface SheetOptions {
   allowDeleteColumn?: boolean;
   /** 虚拟滚动缓冲区大小（行数） */
   virtualScrollBuffer?: number;
+  /** 表格上下边距（像素），用于压缩空间展示更多数据 */
+  verticalPadding?: number;
+  /** 提示文本配置 */
+  toastMessages?: {
+    /** 只读单元格双击提示 */
+    readonlyCellEdit?: string;
+    /** 复制成功提示 */
+    copySuccess?: string;
+    /** 粘贴成功提示 */
+    pasteSuccess?: string;
+    /** 粘贴失败提示 */
+    pasteFailed?: string;
+    /** 其他操作提示 */
+    [key: string]: string | undefined;
+  };
 }
 
 /**

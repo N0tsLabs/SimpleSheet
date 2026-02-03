@@ -34,6 +34,9 @@ export class FileRenderer extends BaseRenderer {
     
     if (Array.isArray(value)) {
       files = value.map(v => this.normalizeFileValue(v));
+    } else if (typeof value === 'string' && value.includes(',')) {
+      // 支持逗号分隔的字符串（如 "url1,url2,url3"）
+      files = value.split(',').map(url => this.normalizeFileValue(url.trim())).filter(f => f.url);
     } else {
       files = [this.normalizeFileValue(value)];
     }

@@ -11,6 +11,8 @@ export interface TagsPopoverOptions {
   options: SelectOption[];
   cell: HTMLElement;
   onClose?: () => void;
+  onChange?: (values: any[]) => void; // 多选时回调
+  multiple?: boolean; // 是否支持多选
 }
 
 // 预设颜色
@@ -86,9 +88,7 @@ export function showTagsPopover(options: TagsPopoverOptions): void {
   // 先关闭已有的
   closeTagsPopover();
   
-  const { values, options: selectOptions, cell, onClose } = options;
-  
-  if (!values || values.length === 0) return;
+  const { values, options: selectOptions, cell, onClose, onChange, multiple = false } = options;
   
   // 创建悬浮窗
   const popover = createElement('div', 'ss-tags-popover');
@@ -99,33 +99,103 @@ export function showTagsPopover(options: TagsPopoverOptions): void {
     popover.setAttribute('data-theme', theme);
   }
   
+  // 当前选中的值（用于多选）
+  let selectedValues: any[] = Array.isArray(values) ? [...values] : (values ? [values] : []);
+  
   // 标题
   const header = createElement('div', 'ss-tags-popover-header');
-  header.innerHTML = `<span class="ss-tags-popover-title">全部标签</span><span class="ss-tags-popover-count">${values.length} 个</span>`;
+  if (multiple) {
+    header.innerHTML = `<span class="ss-tags-popover-title">选择标签</span><span class="ss-tags-popover-count">${selectedValues.length} 个已选</span>`;
+  } else {
+    header.innerHTML = `<span class="ss-tags-popover-title">全部标签</span><span class="ss-tags-popover-count">${selectedValues.length} 个</span>`;
+  }
   popover.appendChild(header);
   
   // 标签列表
   const content = createElement('div', 'ss-tags-popover-content');
   
-  for (const val of values) {
-    const option = selectOptions.find(opt => 
-      opt.value === val || String(opt.value) === String(val)
-    );
-    
-    const tag = createElement('span', 'ss-tags-popover-tag');
-    
-    if (option) {
-      const optIndex = selectOptions.indexOf(option);
-      const colors = getOptionColors(option, optIndex);
-      tag.textContent = option.label;
+  if (multiple) {
+    // 多选模式：显示所有选项，可点击切换选中状态
+    for (const opt of selectOptions) {
+      const isSelected = selectedValues.some(val => 
+        opt.value === val || String(opt.value) === String(val)
+      );
+      
+      const tagItem = createElement('div', 'ss-tags-popover-item');
+      if (isSelected) {
+        tagItem.classList.add('ss-tags-popover-item-selected');
+      }
+      
+      const tag = createElement('span', 'ss-tags-popover-tag');
+      const optIndex = selectOptions.indexOf(opt);
+      const colors = getOptionColors(opt, optIndex);
+      tag.textContent = opt.label;
       tag.style.backgroundColor = colors.bg;
       tag.style.color = colors.text;
-    } else {
-      tag.textContent = String(val);
-      tag.classList.add('ss-tags-popover-tag-plain');
+      tagItem.appendChild(tag);
+      
+      // 选中标记
+      if (isSelected) {
+        const check = createElement('span', 'ss-tags-popover-check');
+        check.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
+        tagItem.appendChild(check);
+      }
+      
+      // 点击切换选中状态
+      tagItem.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const index = selectedValues.findIndex(val => 
+          opt.value === val || String(opt.value) === String(val)
+        );
+        
+        if (index >= 0) {
+          // 取消选中
+          selectedValues.splice(index, 1);
+          tagItem.classList.remove('ss-tags-popover-item-selected');
+          const check = tagItem.querySelector('.ss-tags-popover-check');
+          if (check) check.remove();
+        } else {
+          // 选中
+          selectedValues.push(opt.value);
+          tagItem.classList.add('ss-tags-popover-item-selected');
+          const check = createElement('span', 'ss-tags-popover-check');
+          check.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
+          tagItem.appendChild(check);
+        }
+        
+        // 更新标题
+        header.querySelector('.ss-tags-popover-count')!.textContent = `${selectedValues.length} 个已选`;
+        
+        // 触发回调
+        onChange?.(selectedValues);
+      });
+      
+      content.appendChild(tagItem);
     }
+  } else {
+    // 只读模式：仅显示已有标签
+    if (!selectedValues || selectedValues.length === 0) return;
     
-    content.appendChild(tag);
+    for (const val of selectedValues) {
+      const option = selectOptions.find(opt => 
+        opt.value === val || String(opt.value) === String(val)
+      );
+      
+      const tag = createElement('span', 'ss-tags-popover-tag');
+      
+      if (option) {
+        const optIndex = selectOptions.indexOf(option);
+        const colors = getOptionColors(option, optIndex);
+        tag.textContent = option.label;
+        tag.style.backgroundColor = colors.bg;
+        tag.style.color = colors.text;
+      } else {
+        tag.textContent = String(val);
+        tag.classList.add('ss-tags-popover-tag-plain');
+      }
+      
+      content.appendChild(tag);
+    }
   }
   
   popover.appendChild(content);

@@ -45,6 +45,7 @@ export class AutoFill extends EventEmitter<AutoFillEvents> {
   private isDragging = false;
   private sourceRange: SelectionRange | null = null;
   private targetEnd: CellPosition | null = null;
+  private startPosition: { x: number; y: number } | null = null; // 记录拖动开始位置
   private lastFillInfo: {
     source: SelectionRange;
     target: SelectionRange;
@@ -202,6 +203,8 @@ export class AutoFill extends EventEmitter<AutoFillEvents> {
     this.isDragging = true;
     this.sourceRange = selection;
     this.targetEnd = null;
+    // 记录拖动开始位置
+    this.startPosition = { x: e.clientX, y: e.clientY };
 
     document.body.classList.add('ss-filling');
 
@@ -212,22 +215,50 @@ export class AutoFill extends EventEmitter<AutoFillEvents> {
    * 处理鼠标移动
    */
   private handleMouseMove(e: MouseEvent): void {
-    if (!this.isDragging || !this.sourceRange || !this.container) return;
+    if (!this.isDragging || !this.sourceRange || !this.container || !this.startPosition) return;
 
     const containerRect = this.container.getBoundingClientRect();
     const x = e.clientX - containerRect.left;
     const y = e.clientY - containerRect.top;
 
+    // 计算鼠标移动的主要方向（基于像素距离）
+    const deltaX = e.clientX - this.startPosition.x;
+    const deltaY = e.clientY - this.startPosition.y;
+    const absDeltaX = Math.abs(deltaX);
+    const absDeltaY = Math.abs(deltaY);
+
+    // 如果移动距离太小，不处理
+    if (absDeltaX < 5 && absDeltaY < 5) return;
+
     const cell = this.options.getCellFromPoint(x, y);
     if (!cell) return;
 
-    this.targetEnd = cell;
-
-    // 计算填充方向和范围
     const normalized = normalizeRange(this.sourceRange);
-    const targetRange = this.calculateTargetRange(normalized, cell);
+    
+    // 基于鼠标移动的主要方向来确定填充方向
+    let direction: FillDirection | null = null;
+    if (absDeltaY > absDeltaX) {
+      // 垂直方向为主
+      if (deltaY > 0 && cell.row > normalized.end.row) {
+        direction = 'down';
+      } else if (deltaY < 0 && cell.row < normalized.start.row) {
+        direction = 'up';
+      }
+    } else {
+      // 水平方向为主
+      if (deltaX > 0 && cell.col > normalized.end.col) {
+        direction = 'right';
+      } else if (deltaX < 0 && cell.col < normalized.start.col) {
+        direction = 'left';
+      }
+    }
 
+    if (!direction) return;
+
+    // 根据方向计算目标范围
+    const targetRange = this.calculateTargetRangeByDirection(normalized, cell, direction);
     if (targetRange) {
+      this.targetEnd = cell;
       this.showPreview(targetRange);
       this.emit('fill:move', { targetRange });
     }
@@ -237,19 +268,48 @@ export class AutoFill extends EventEmitter<AutoFillEvents> {
    * 处理鼠标释放
    */
   private handleMouseUp(e: MouseEvent): void {
-    if (!this.isDragging || !this.sourceRange || !this.targetEnd) {
+    if (!this.isDragging || !this.sourceRange || !this.targetEnd || !this.startPosition) {
       this.isDragging = false;
+      this.startPosition = null; // 清除开始位置
       this.hidePreview();
       document.body.classList.remove('ss-filling');
       return;
     }
 
     const normalized = normalizeRange(this.sourceRange);
-    const targetRange = this.calculateTargetRange(normalized, this.targetEnd);
+    
+    // 计算鼠标移动的主要方向
+    const deltaX = e.clientX - this.startPosition.x;
+    const deltaY = e.clientY - this.startPosition.y;
+    const absDeltaX = Math.abs(deltaX);
+    const absDeltaY = Math.abs(deltaY);
+    
+    let direction: FillDirection | null = null;
+    if (absDeltaY > absDeltaX) {
+      if (deltaY > 0 && this.targetEnd.row > normalized.end.row) {
+        direction = 'down';
+      } else if (deltaY < 0 && this.targetEnd.row < normalized.start.row) {
+        direction = 'up';
+      }
+    } else {
+      if (deltaX > 0 && this.targetEnd.col > normalized.end.col) {
+        direction = 'right';
+      } else if (deltaX < 0 && this.targetEnd.col < normalized.start.col) {
+        direction = 'left';
+      }
+    }
+    
+    if (!direction) {
+      this.isDragging = false;
+      this.startPosition = null;
+      this.hidePreview();
+      document.body.classList.remove('ss-filling');
+      return;
+    }
+
+    const targetRange = this.calculateTargetRangeByDirection(normalized, this.targetEnd, direction);
 
     if (targetRange) {
-      const direction = this.getDirection(normalized, this.targetEnd);
-      if (direction) {
         // 保存原始值用于切换填充模式
         this.saveOriginalValues(targetRange);
         
@@ -274,12 +334,12 @@ export class AutoFill extends EventEmitter<AutoFillEvents> {
           direction,
           mode: 'copy',
         });
-      }
     }
 
     this.isDragging = false;
     this.sourceRange = null;
     this.targetEnd = null;
+    this.startPosition = null; // 清除开始位置
     this.hidePreview();
     document.body.classList.remove('ss-filling');
   }
@@ -422,12 +482,9 @@ export class AutoFill extends EventEmitter<AutoFillEvents> {
   }
 
   /**
-   * 计算目标范围
+   * 根据方向计算目标范围
    */
-  private calculateTargetRange(source: SelectionRange, target: CellPosition): SelectionRange | null {
-    const direction = this.getDirection(source, target);
-    if (!direction) return null;
-
+  private calculateTargetRangeByDirection(source: SelectionRange, target: CellPosition, direction: FillDirection): SelectionRange | null {
     switch (direction) {
       case 'down':
         return {
@@ -453,38 +510,83 @@ export class AutoFill extends EventEmitter<AutoFillEvents> {
   }
 
   /**
-   * 获取填充方向
+   * 计算目标范围（保留旧方法以兼容）
+   */
+  private calculateTargetRange(source: SelectionRange, target: CellPosition): SelectionRange | null {
+    const direction = this.getDirection(source, target);
+    if (!direction) return null;
+    return this.calculateTargetRangeByDirection(source, target, direction);
+  }
+
+  /**
+   * 获取填充方向（基于鼠标移动的主要方向，而不是严格要求列对齐）
    */
   private getDirection(source: SelectionRange, target: CellPosition): FillDirection | null {
-    // 优先判断垂直方向
-    if (target.row > source.end.row && target.col >= source.start.col && target.col <= source.end.col) {
-      return 'down';
+    if (!this.startPosition) {
+      // 如果没有开始位置，使用旧逻辑（兼容性）
+      if (target.row > source.end.row && target.col >= source.start.col && target.col <= source.end.col) {
+        return 'down';
+      }
+      if (target.row < source.start.row && target.col >= source.start.col && target.col <= source.end.col) {
+        return 'up';
+      }
+      if (target.col > source.end.col && target.row >= source.start.row && target.row <= source.end.row) {
+        return 'right';
+      }
+      if (target.col < source.start.col && target.row >= source.start.row && target.row <= source.end.row) {
+        return 'left';
+      }
+      return null;
     }
-    if (target.row < source.start.row && target.col >= source.start.col && target.col <= source.end.col) {
-      return 'up';
+
+    // 获取目标单元格的位置来计算鼠标移动距离
+    const targetRect = this.options.getCellRect(target.row, target.col);
+    if (!targetRect) return null;
+
+    // 计算鼠标移动的主要方向（基于像素距离）
+    const deltaX = targetRect.left + targetRect.width / 2 - this.startPosition.x;
+    const deltaY = targetRect.top + targetRect.height / 2 - this.startPosition.y;
+    
+    const absDeltaX = Math.abs(deltaX);
+    const absDeltaY = Math.abs(deltaY);
+    
+    // 如果垂直移动距离大于水平移动距离，判断为垂直方向
+    if (absDeltaY > absDeltaX) {
+      if (deltaY > 0 && target.row > source.end.row) {
+        return 'down';
+      }
+      if (deltaY < 0 && target.row < source.start.row) {
+        return 'up';
+      }
+    } else {
+      // 水平方向
+      if (deltaX > 0 && target.col > source.end.col) {
+        return 'right';
+      }
+      if (deltaX < 0 && target.col < source.start.col) {
+        return 'left';
+      }
     }
-    // 水平方向
-    if (target.col > source.end.col && target.row >= source.start.row && target.row <= source.end.row) {
-      return 'right';
-    }
-    if (target.col < source.start.col && target.row >= source.start.row && target.row <= source.end.row) {
-      return 'left';
-    }
+    
     return null;
   }
 
   /**
-   * 检测数字序列的步长
+   * 检测数字序列的步长（支持格式化数字字符串）
    */
   private detectStep(values: any[]): number | null {
     if (values.length < 2) return null;
     
-    // 检查是否都是数字
+    // 检查是否都是数字（支持格式化字符串，如 "1,234.56" 或 "¥123.45"）
     const nums = values.map(v => {
       if (typeof v === 'number') return v;
       if (typeof v === 'string') {
-        const n = parseFloat(v);
-        if (!isNaN(n)) return n;
+        // 移除常见的格式化字符：货币符号、千位分隔符、空格等
+        const cleaned = v
+          .replace(/[¥$€£₹,\s]/g, '') // 移除货币符号、千位分隔符、空格
+          .replace(/[^\d.-]/g, ''); // 只保留数字、小数点和负号
+        const n = parseFloat(cleaned);
+        if (!isNaN(n) && isFinite(n)) return n;
       }
       return null;
     });
@@ -494,9 +596,11 @@ export class AutoFill extends EventEmitter<AutoFillEvents> {
     // 计算步长
     const step = (nums[1] as number) - (nums[0] as number);
     
-    // 验证步长是否一致
+    // 验证步长是否一致（允许小的浮点数误差）
+    const tolerance = 0.0001;
     for (let i = 2; i < nums.length; i++) {
-      if ((nums[i] as number) - (nums[i - 1] as number) !== step) {
+      const expectedStep = (nums[i] as number) - (nums[i - 1] as number);
+      if (Math.abs(expectedStep - step) > tolerance) {
         return null;
       }
     }

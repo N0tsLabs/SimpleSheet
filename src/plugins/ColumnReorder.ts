@@ -190,33 +190,84 @@ export class ColumnReorder extends EventEmitter<ColumnReorderEvents> {
     }
 
     // 计算放置位置
+    // 关键修复：直接使用表头单元格的实际DOM位置来判断，而不是累加列宽
+    // 这样可以准确处理不同列宽的情况
     const header = this.container.querySelector('.ss-header') as HTMLElement;
     if (!header) return;
     
-    const headerRect = header.getBoundingClientRect();
-    const relativeX = e.clientX - headerRect.left;
-    
-    // 考虑滚动位置
-    const scrollContainer = this.container.querySelector('.ss-scroll-container') as HTMLElement;
-    const scrollLeft = scrollContainer ? scrollContainer.scrollLeft : 0;
-    const adjustedX = relativeX + scrollLeft;
-    
-    // 计算列位置
-    let x = this.options.showRowNumber ? this.options.rowNumberWidth : 0;
     const columns = this.options.getColumns();
-    let newDropIndex = 0;
-
-    for (let i = 0; i < columns.length; i++) {
-      const colWidth = this.options.getColumnWidth(i);
-      const colCenter = x + colWidth / 2;
-
-      if (adjustedX < colCenter) {
-        newDropIndex = i;
-        break;
+    let newDropIndex = columns.length; // 默认放在最后
+    
+    // 获取所有表头单元格
+    const headerCells = header.querySelectorAll('.ss-header-cell:not(.ss-row-number-header):not(.ss-corner-cell)') as NodeListOf<HTMLElement>;
+    
+    if (headerCells.length > 0) {
+      // 方法1：使用实际DOM位置（最准确）
+      for (let i = 0; i < headerCells.length; i++) {
+        const cell = headerCells[i];
+        const cellRect = cell.getBoundingClientRect();
+        const cellCenter = cellRect.left + cellRect.width / 2;
+        
+        // 如果鼠标在单元格的左半部分，插入到该列之前
+        if (e.clientX >= cellRect.left && e.clientX < cellCenter) {
+          const colIndex = parseInt(cell.dataset.col || '-1', 10);
+          if (colIndex >= 0) {
+            newDropIndex = colIndex;
+            break;
+          }
+        }
+        // 如果鼠标在单元格的右半部分，插入到该列之后
+        if (e.clientX >= cellCenter && e.clientX < cellRect.right) {
+          const colIndex = parseInt(cell.dataset.col || '-1', 10);
+          if (colIndex >= 0) {
+            newDropIndex = colIndex + 1;
+            break;
+          }
+        }
       }
       
-      x += colWidth;
-      newDropIndex = i + 1;
+      // 如果鼠标在所有单元格之前，插入到第一列之前
+      if (headerCells.length > 0) {
+        const firstCell = headerCells[0];
+        const firstCellRect = firstCell.getBoundingClientRect();
+        if (e.clientX < firstCellRect.left) {
+          newDropIndex = 0;
+        }
+      }
+      
+      // 如果鼠标在所有单元格之后，插入到最后
+      if (headerCells.length > 0) {
+        const lastCell = headerCells[headerCells.length - 1];
+        const lastCellRect = lastCell.getBoundingClientRect();
+        if (e.clientX >= lastCellRect.right) {
+          newDropIndex = columns.length;
+        }
+      }
+    } else {
+      // 回退方法：使用累加列宽（当无法获取DOM时）
+      const headerRect = header.getBoundingClientRect();
+      const relativeX = e.clientX - headerRect.left;
+      
+      // 考虑滚动位置
+      const scrollContainer = this.container.querySelector('.ss-scroll-container') as HTMLElement;
+      const scrollLeft = scrollContainer ? scrollContainer.scrollLeft : 0;
+      const adjustedX = relativeX + scrollLeft;
+      
+      // 计算列位置
+      let x = this.options.showRowNumber ? this.options.rowNumberWidth : 0;
+      
+      for (let i = 0; i < columns.length; i++) {
+        const colWidth = this.options.getColumnWidth(i);
+        const colCenter = x + colWidth / 2;
+
+        if (adjustedX < colCenter) {
+          newDropIndex = i;
+          break;
+        }
+        
+        x += colWidth;
+        newDropIndex = i + 1;
+      }
     }
 
     // 限制范围
@@ -230,22 +281,71 @@ export class ColumnReorder extends EventEmitter<ColumnReorderEvents> {
     this.dropIndex = newDropIndex;
 
     // 更新放置指示器位置
+    // 关键修复：使用实际DOM位置来计算指示器位置，而不是累加列宽
     if (this.dropIndicator && this.container) {
       const header = this.container.querySelector('.ss-header') as HTMLElement;
       if (header) {
-        let indicatorX = this.options.showRowNumber ? this.options.rowNumberWidth : 0;
-        for (let i = 0; i < newDropIndex && i < columns.length; i++) {
-          indicatorX += this.options.getColumnWidth(i);
-        }
+        let indicatorX = 0;
         
-        // 考虑滚动位置
-        const scrollContainer = this.container.querySelector('.ss-scroll-container') as HTMLElement;
-        const scrollLeft = scrollContainer ? scrollContainer.scrollLeft : 0;
-        const finalX = indicatorX - scrollLeft - 1;
+        // 方法1：使用实际DOM位置（最准确）
+        const headerCells = header.querySelectorAll('.ss-header-cell:not(.ss-row-number-header):not(.ss-corner-cell)') as NodeListOf<HTMLElement>;
+        
+        if (newDropIndex === 0) {
+          // 插入到第一列之前
+          if (headerCells.length > 0) {
+            const firstCell = headerCells[0];
+            const firstCellRect = firstCell.getBoundingClientRect();
+            const headerRect = header.getBoundingClientRect();
+            indicatorX = firstCellRect.left - headerRect.left;
+          } else {
+            // 回退：使用累加
+            indicatorX = this.options.showRowNumber ? this.options.rowNumberWidth : 0;
+          }
+        } else if (newDropIndex >= columns.length) {
+          // 插入到最后
+          if (headerCells.length > 0) {
+            const lastCell = headerCells[headerCells.length - 1];
+            const lastCellRect = lastCell.getBoundingClientRect();
+            const headerRect = header.getBoundingClientRect();
+            indicatorX = lastCellRect.right - headerRect.left;
+          } else {
+            // 回退：使用累加
+            let x = this.options.showRowNumber ? this.options.rowNumberWidth : 0;
+            for (let i = 0; i < columns.length; i++) {
+              x += this.options.getColumnWidth(i);
+            }
+            indicatorX = x;
+          }
+        } else {
+          // 插入到指定列之前
+          // 找到目标列的单元格
+          let targetCell: HTMLElement | null = null;
+          for (let i = 0; i < headerCells.length; i++) {
+            const cell = headerCells[i];
+            const colIndex = parseInt(cell.dataset.col || '-1', 10);
+            if (colIndex === newDropIndex) {
+              targetCell = cell;
+              break;
+            }
+          }
+          
+          if (targetCell) {
+            const targetCellRect = targetCell.getBoundingClientRect();
+            const headerRect = header.getBoundingClientRect();
+            indicatorX = targetCellRect.left - headerRect.left;
+          } else {
+            // 回退：使用累加
+            let x = this.options.showRowNumber ? this.options.rowNumberWidth : 0;
+            for (let i = 0; i < newDropIndex; i++) {
+              x += this.options.getColumnWidth(i);
+            }
+            indicatorX = x;
+          }
+        }
 
         setStyles(this.dropIndicator, {
           display: 'block',
-          left: `${Math.max(0, finalX)}px`,
+          left: `${indicatorX}px`,
           top: '0',
           height: `${this.options.getHeaderHeight()}px`,
         });

@@ -640,6 +640,43 @@
   margin-bottom: 12px;
 }
 
+/* 多选模式：每个选项是一个可点击的项目 */
+.ss-tags-popover-content:has(.ss-tags-popover-item) {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.ss-tags-popover-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  gap: 8px;
+}
+
+.ss-tags-popover-item:hover {
+  background-color: #f3f4f6;
+}
+
+.ss-tags-popover-item-selected {
+  background-color: #eff6ff;
+}
+
+.ss-tags-popover-item-selected:hover {
+  background-color: #dbeafe;
+}
+
+.ss-tags-popover-check {
+  display: flex;
+  align-items: center;
+  color: #3b82f6;
+  flex-shrink: 0;
+}
+
 .ss-tags-popover-tag {
   display: inline-block;
   padding: 5px 12px;
