@@ -252,20 +252,26 @@
 .ss-cell.ss-wrap-text {
   white-space: normal;
   align-items: flex-start;
-  padding-top: 4px;
-  padding-bottom: 4px;
   overflow: hidden;
+  height: auto !important; /* 覆盖固定高度，让内容决定高度 */
+}
+
+/* 动态高度的 wrapText 单元格 */
+.ss-cell.ss-cell-wrap-text {
+  height: auto !important;
+  min-height: var(--ss-row-height, 28px);
 }
 
 .ss-cell-multiline {
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.2; /* 减小行高，让文字更紧凑 */
-  max-width: 100%;
+  width: 100%;
   overflow: hidden;
   pointer-events: none; /* 让鼠标事件穿透到父单元格，确保双击编辑正常 */
   margin: 0; /* 移除默认 margin */
-  padding: 0; /* 移除默认 padding */
+  padding: var(--ss-cell-padding, 1px 6px); /* 使用标准单元格 padding */
+  box-sizing: border-box;
 }
 
 /* 单元格展开浮层 - 选中时显示完整内容（悬浮窗形式，类似文件附件预览） */

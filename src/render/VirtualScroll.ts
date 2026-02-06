@@ -398,68 +398,73 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
    */
   private calculate(): void {
     if (!this.scrollContainer || !this.viewport) return;
-    
+
     const scrollTop = this.scrollContainer.scrollTop;
     const scrollLeft = this.scrollContainer.scrollLeft;
     const viewportRect = this.viewport.getBoundingClientRect();
     const viewportHeight = viewportRect.height - this.headerHeight;
     const viewportWidth = viewportRect.width;
-    
-    // 计算可见行范围
-    // 核心策略：始终使用固定行高来估算可视区域
-    // 这样可以避免循环依赖：不需要知道实际行高就能计算可视区域
-    // 渲染后，根据实际行高调整位置，如果发现可视区域需要扩展，再扩展渲染范围
-    
-    let startRow = 0;
-    let endRow = this.rowCount - 1;
-    
-    // 使用固定行高估算可视区域（这是最可靠的方式，避免循环依赖）
-    // 关键：使用更大的缓冲区，确保滚动时不会出现空白
-    // 对于动态行高，需要更保守的估算
-    const bufferSize = this.buffer * 2; // 增大缓冲区
-    startRow = Math.max(0, Math.floor(scrollTop / this.rowHeight) - bufferSize);
-    const visibleRows = Math.ceil(viewportHeight / this.rowHeight);
-    endRow = Math.min(this.rowCount - 1, startRow + visibleRows + bufferSize * 2);
+
+    // 避免除以零
+    const safeRowHeight = this.rowHeight || 36;
+    const visibleRows = Math.max(1, Math.ceil(viewportHeight / safeRowHeight));
+    const bufferSize = Math.max(1, this.buffer * 2);
+
+    // 计算起始行
+    let startRow = Math.max(0, Math.floor(scrollTop / safeRowHeight) - bufferSize);
+
+    // 关键修复：确保 startRow 不超过有效范围
+    if (startRow > this.rowCount - 1) {
+      startRow = Math.max(0, this.rowCount - visibleRows - bufferSize);
+    }
+
+    // 计算结束行
+    let endRow = Math.min(this.rowCount - 1, startRow + visibleRows + bufferSize);
+
+    // 确保 endRow 至少为 startRow（至少渲染可见行）
+    endRow = Math.max(endRow, startRow);
+
+    // 确保 endRow 不超过范围
+    endRow = Math.min(endRow, this.rowCount - 1);
+
+    // 确保 startRow 最小为 0
+    startRow = Math.max(0, startRow);
     
     // 如果提供了 getRowIndexFromYFn，并且已经有一些行被渲染过，可以尝试使用动态行高优化
     // 但只用于微调，不用于主要计算
-    if (this.getRowIndexFromYFn) {
+    if (this.getRowIndexFromYFn && this.rowCount > 0) {
       try {
         const topRow = this.getRowIndexFromYFn(Math.max(0, scrollTop));
-        const bottomRow = this.getRowIndexFromYFn(scrollTop + viewportHeight);
-        
-        // 只有当计算结果合理且与固定行高估算接近时才使用（避免大幅偏差）
+        const bottomRow = this.getRowIndexFromYFn(Math.min(scrollTop + viewportHeight, this.getTotalHeight()));
+
+        // 只有当计算结果合理且与固定行高估算接近时才使用
         if (
-          topRow >= 0 && 
-          topRow < this.rowCount && 
-          bottomRow >= topRow && 
-          bottomRow < this.rowCount &&
-          Math.abs(topRow - startRow) <= this.buffer * 2 // 偏差不能太大
+          topRow >= 0 &&
+          topRow < this.rowCount &&
+          bottomRow >= topRow &&
+          bottomRow < this.rowCount
         ) {
-          // 使用动态行高的结果，但确保范围不会太小
+          // 取固定行高和动态行高的并集，确保覆盖足够范围
           const dynamicStartRow = Math.max(0, topRow - this.buffer);
           const dynamicEndRow = Math.min(this.rowCount - 1, bottomRow + this.buffer);
-          
-          // 取固定行高和动态行高的并集，确保覆盖足够范围
+
+          // 取并集
           startRow = Math.min(startRow, dynamicStartRow);
           endRow = Math.max(endRow, dynamicEndRow);
+
+          // 确保 endRow >= startRow
+          if (endRow < startRow) {
+            endRow = startRow;
+          }
         }
       } catch (e) {
         // 如果计算出错，使用固定行高估算
-        // 不输出警告，避免控制台噪音
       }
     }
-    
-    // 确保 endRow >= startRow，并且至少渲染一行
-    if (endRow < startRow) {
-      endRow = Math.min(this.rowCount - 1, startRow + Math.ceil(viewportHeight / this.rowHeight) + this.buffer * 2);
-    }
-    
-    // 确保至少渲染一行
-    if (startRow >= this.rowCount) {
-      startRow = Math.max(0, this.rowCount - 1);
-      endRow = startRow;
-    }
+
+    // 最终保护：确保 startRow 和 endRow 都在有效范围内
+    startRow = Math.max(0, Math.min(startRow, this.rowCount - 1));
+    endRow = Math.max(startRow, Math.min(endRow, this.rowCount - 1));
     
     // 计算可见列范围
     let colOffset = this.showRowNumber ? this.rowNumberWidth : 0;

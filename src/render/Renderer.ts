@@ -5,16 +5,17 @@
 
 import type { Column, RowData, CellMeta, VirtualScrollState, CellRenderer } from '../types';
 import { VirtualScroll } from './VirtualScroll';
-import { 
-  TextRenderer, 
-  NumberRenderer, 
-  DateRenderer, 
+import {
+  TextRenderer,
+  NumberRenderer,
+  DateRenderer,
   SelectRenderer,
   EmailRenderer,
   PhoneRenderer,
   LinkRenderer,
   CheckboxRenderer,
   FileRenderer,
+  precalculateRowHeights,
 } from '../renderers';
 import { createElement, setStyles, classNames, rafThrottle } from '../utils/dom';
 import { columnIndexToLetter } from '../utils/helpers';
@@ -28,6 +29,8 @@ interface RendererOptions {
   rowNumberWidth: number;
   virtualScrollBuffer: number;
   verticalPadding?: number;
+  /** 预计算的行高（用于 wrapText 模式） */
+  rowHeights?: Map<number, number>;
 }
 
 export class Renderer {
@@ -70,15 +73,23 @@ export class Renderer {
   /** 选区状态 */
   private selectedCells: Set<string> = new Set();
   private activeCell: { row: number; col: number } | null = null;
-  
+
   /** 上一次的列数量，用于检测列变化 */
   private lastColumnCount: number = 0;
+
+  /** 待处理的批量计算计数（用于防抖） */
+  private pendingBatchCount: number = 0;
 
   constructor(container: HTMLElement, options: RendererOptions) {
     this.container = container;
     this.options = options;
     this.lastColumnCount = options.columns.length;
-    
+
+    // 如果传入了预计算的行高，直接使用
+    if (options.rowHeights) {
+      this.rowHeights = options.rowHeights;
+    }
+
     this.virtualScroll = new VirtualScroll({
       rowHeight: options.rowHeight,
       headerHeight: options.headerHeight,
@@ -91,7 +102,7 @@ export class Renderer {
       getRowOffset: (rowIndex: number) => this.getRowOffset(rowIndex),
       getRowIndexFromY: (y: number) => this.getRowIndexFromY(y),
     });
-    
+
     this.init();
   }
 
@@ -112,6 +123,23 @@ export class Renderer {
     
     // 创建滚动容器
     this.scrollContainer = createElement('div', 'ss-scroll-container');
+
+    // 阻止滚动条区域的点击事件透传到单元格
+    // 当点击滚动条轨道或滑块时，不应该触发单元格的选中
+    this.scrollContainer.addEventListener('mousedown', (e) => {
+      // 检查点击目标是否是交互元素（单元格、表头、行号）
+      const target = e.target as HTMLElement;
+      const isInteractive = target.closest('.ss-cell') ||
+                           target.closest('.ss-header-cell') ||
+                           target.closest('.ss-row-number') ||
+                           target.closest('.ss-column-resizer');
+
+      // 如果点击的不是交互元素（是滚动条区域），阻止事件
+      if (!isInteractive) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true); // 使用捕获阶段，确保在其他事件处理之前执行
     
     // 创建表体
     this.body = createElement('div', 'ss-body');
@@ -147,6 +175,11 @@ export class Renderer {
   }
 
   /**
+   * 分批预计算行高的配置
+   */
+  private readonly BATCH_SIZE = 50; // 每批计算的行数
+
+  /**
    * 设置数据获取函数
    */
   setDataGetter(
@@ -157,6 +190,243 @@ export class Renderer {
     this.getDataFn = getData;
     this.getRowDataFn = getRowData;
     this.getCellMetaFn = getCellMeta;
+
+    // 空闲时分批计算剩余行（首屏渲染后会在 handleVirtualScrollChange 中修正）
+    this.continuePrecalculateOnIdle();
+  }
+
+  /**
+   * 调度分批预计算行高
+   */
+  private schedulePrecalculateRowHeights(): void {
+    const hasWrapText = this.options.columns.some(col => col.wrapText === 'wrap' || col.wrapText === 'fixed');
+    if (!hasWrapText) return;
+    if (this.options.rowHeights && this.options.rowHeights.size > 0) return;
+    if (!this.getRowDataFn || this.options.rowCount === 0) return;
+
+    this.pendingBatchCount = 0;
+
+    // 注意：首屏渲染后再计算行高（因为需要实际渲染的单元格）
+    // 渲染完成后会调用 calculateRowHeightsBatch 来修正
+
+    // 空闲时分批计算剩余行
+    this.continuePrecalculateOnIdle();
+  }
+
+  /**
+   * 计算/修正一批行的高度
+   * 直接复制实际单元格来测量，确保样式 100% 一致
+   */
+  private calculateRowHeightsBatch(startRow: number, count: number): void {
+    if (!this.getDataFn) return;
+
+    const endRow = Math.min(startRow + count, this.options.rowCount);
+
+    // 如果还没有渲染任何行，跳过
+    if (this.rowCache.size === 0) return;
+
+    let needsUpdate = false;
+
+    for (let rowIndex = startRow; rowIndex < endRow; rowIndex++) {
+      // 找出所有 wrapText 列
+      const wrapTextCols: Column[] = [];
+      for (let colIndex = 0; colIndex < this.options.columns.length; colIndex++) {
+        const col = this.options.columns[colIndex];
+        if (col.wrapText === 'wrap' || col.wrapText === 'fixed') {
+          wrapTextCols.push(col);
+        }
+      }
+
+      if (wrapTextCols.length === 0) {
+        // 没有 wrapText 列，确保使用默认高度
+        const currentHeight = this.rowHeights.get(rowIndex);
+        if (currentHeight !== this.options.rowHeight) {
+          this.rowHeights.set(rowIndex, this.options.rowHeight);
+          needsUpdate = true;
+        }
+        continue;
+      }
+
+      let maxHeight = this.options.rowHeight;
+
+      // 直接从已渲染的单元格中获取高度
+      for (const col of wrapTextCols) {
+        const colIndex = this.options.columns.indexOf(col);
+        const cellKey = `${rowIndex}:${colIndex}`;
+        const cellEl = this.cellCache.get(cellKey);
+
+        if (!cellEl) continue;
+
+        // 获取实际渲染的单元格高度
+        const height = cellEl.scrollHeight;
+
+        if (height > maxHeight) {
+          maxHeight = height;
+        }
+      }
+
+      // 如果高度变化了，需要更新
+      const currentHeight = this.rowHeights.get(rowIndex);
+      if (currentHeight !== maxHeight) {
+        this.rowHeights.set(rowIndex, maxHeight);
+        needsUpdate = true;
+      }
+    }
+
+    // 如果有更新，更新容器样式
+    if (needsUpdate) {
+      this.updateContainerStyles();
+    }
+  }
+
+  /**
+   * 修正所有可见行的行高
+   */
+  private correctVisibleRowHeights(): void {
+    if (this.rowCache.size === 0) return;
+
+    // 获取所有可见行的索引
+    const visibleRowIndices = Array.from(this.rowCache.keys());
+    if (visibleRowIndices.length === 0) return;
+
+    // 计算所有可见行的最大索引
+    const maxIndex = Math.max(...visibleRowIndices);
+
+    // 修正所有可见行的行高
+    this.correctRowHeightsBatch(0, maxIndex + 1);
+  }
+
+  /**
+   * 修正一批行的实际高度
+   * 从实际渲染的单元格中获取高度并更新行样式
+   */
+  private correctRowHeightsBatch(startRow: number, count: number): void {
+    const endRow = Math.min(startRow + count, this.options.rowCount);
+
+    for (let rowIndex = startRow; rowIndex < endRow; rowIndex++) {
+      // 找出所有 wrapText 列
+      const wrapTextCols = this.options.columns.filter(col =>
+        col.wrapText === 'wrap' || col.wrapText === 'fixed'
+      );
+
+      if (wrapTextCols.length === 0) continue;
+
+      let maxHeight = this.options.rowHeight;
+
+      // 直接从已渲染的单元格中获取高度
+      for (const col of wrapTextCols) {
+        const colIndex = this.options.columns.indexOf(col);
+        const cellKey = `${rowIndex}:${colIndex}`;
+        const cellEl = this.cellCache.get(cellKey);
+
+        if (!cellEl) continue;
+
+        const height = cellEl.scrollHeight;
+        if (height > maxHeight) {
+          maxHeight = height;
+        }
+      }
+
+      // 更新行高
+      this.rowHeights.set(rowIndex, maxHeight);
+
+      // 更新行元素的高度
+      const row = this.rowCache.get(rowIndex);
+      if (row) {
+        setStyles(row, {
+          height: `${maxHeight}px`,
+        });
+
+        // 更新行号单元格高度
+        const rowNumberCell = row.querySelector('.ss-row-number') as HTMLElement;
+        if (rowNumberCell) {
+          setStyles(rowNumberCell, {
+            height: `${maxHeight}px`,
+            minHeight: `${maxHeight}px`,
+          });
+        }
+
+        // 更新所有单元格高度
+        const cells = row.querySelectorAll('.ss-cell:not(.ss-row-number)');
+        cells.forEach(cell => {
+          setStyles(cell as HTMLElement, {
+            height: `${maxHeight}px`,
+            minHeight: `${maxHeight}px`,
+          });
+        });
+      }
+    }
+
+    // 更新容器样式和虚拟滚动
+    this.updateContainerStyles();
+    this.virtualScroll.update({});
+  }
+
+  /**
+   * 在空闲时继续预计算
+   */
+  private continuePrecalculateOnIdle(): void {
+    if ('requestIdleCallback' in window) {
+      (window as any).requestIdleCallback(() => this.processNextBatch());
+    } else {
+      setTimeout(() => this.processNextBatch(), 100);
+    }
+  }
+
+  /**
+   * 处理下一批
+   */
+  private processNextBatch(): void {
+    let startRow = 0;
+    while (startRow < this.options.rowCount && this.rowHeights.has(startRow)) {
+      startRow++;
+    }
+    if (startRow >= this.options.rowCount) return;
+
+    this.calculateRowHeightsBatch(startRow, this.BATCH_SIZE);
+
+    if (this.pendingBatchCount > 0) {
+      this.continuePrecalculateOnIdle();
+    }
+  }
+
+  /**
+   * 预计算所有行的实际高度（用于 wrapText 模式）
+   * @deprecated 使用 schedulePrecalculateRowHeights 替代
+   */
+  private precalculateRowHeights(): void {
+    // 如果外部已经传入了 rowHeights，不再重复计算
+    if (this.options.rowHeights && this.options.rowHeights.size > 0) {
+      return;
+    }
+
+    if (!this.getRowDataFn || this.options.rowCount === 0) {
+      return;
+    }
+
+    // 检查是否有 wrapText 为 wrap 或 fixed 的列（这两种模式都可能需要行高）
+    const hasWrapText = this.options.columns.some(col => col.wrapText === 'wrap' || col.wrapText === 'fixed');
+    if (!hasWrapText) {
+      return;
+    }
+
+    // 获取所有行数据
+    const dataList: RowData[] = [];
+    for (let i = 0; i < this.options.rowCount; i++) {
+      dataList.push(this.getRowDataFn(i));
+    }
+
+    // 同步预计算所有行的高度
+    const calculatedHeights = precalculateRowHeights(
+      dataList,
+      this.options.columns,
+      this.options.rowHeight
+    );
+
+    // 应用计算的高度
+    for (const [rowIndex, height] of calculatedHeights) {
+      this.rowHeights.set(rowIndex, height);
+    }
   }
   
   /**
@@ -718,11 +988,13 @@ export class Renderer {
     // 关键修复：在移除不可见单元格之前计算行高，确保所有可见单元格都被考虑
     // 策略：同步计算行高并存储，立即更新位置
     // 这样可以确保虚拟滚动能立即使用正确的行高
-    
-    let maxHeight = this.options.rowHeight;
+
+    // 优先使用预计算的高度（如果已经存在）
+    let maxHeight = this.rowHeights.get(rowIndex) || this.options.rowHeight;
+
     // 获取当前行中所有已渲染的单元格（包括即将被移除的）
     const allRowCells = row.querySelectorAll('.ss-cell:not(.ss-row-number)');
-    
+
     // 优先使用 data-needed-height（这是渲染器预先计算的）
     allRowCells.forEach(cellEl => {
       const neededHeight = cellEl.getAttribute('data-needed-height');
@@ -733,17 +1005,30 @@ export class Renderer {
         }
       }
     });
-    
-    // 如果还没有 data-needed-height，使用实际高度（fallback）
-    if (maxHeight === this.options.rowHeight && allRowCells.length > 0) {
-      allRowCells.forEach(cellEl => {
-        const actualHeight = (cellEl as HTMLElement).scrollHeight;
-        if (actualHeight > maxHeight) {
-          maxHeight = actualHeight;
-        }
-      });
+
+    // 如果预计算的高度存在且有效，使用它而不是 scrollHeight
+    // 避免 scrollHeight 与预计算高度不一致导致的滚动条问题
+    const precalculatedHeight = this.rowHeights.get(rowIndex);
+    const hasPrecalculatedHeight = precalculatedHeight !== undefined && precalculatedHeight > this.options.rowHeight;
+
+    // 只在以下情况使用 scrollHeight：
+    // 1. 没有预计算高度
+    // 2. 预计算高度等于默认高度（说明该行不需要自适应高度）
+    if (!hasPrecalculatedHeight && allRowCells.length > 0) {
+      // 检查是否有 wrap 或 fixed 模式的列（这些列可能需要更大的高度）
+      const hasWrapMode = this.options.columns.some(col => col.wrapText === 'wrap' || col.wrapText === 'fixed');
+      if (hasWrapMode) {
+        allRowCells.forEach(cellEl => {
+          const actualHeight = (cellEl as HTMLElement).scrollHeight;
+          if (actualHeight > maxHeight) {
+            maxHeight = actualHeight;
+          }
+        });
+      }
     }
-    
+    // 如果有预计算高度，直接使用它，不再检查 scrollHeight
+    // 这样可以确保 getTotalHeight() 的结果与实际渲染一致
+
     // 立即存储行的实际高度到缓存（确保虚拟滚动能使用）
     const oldHeight = this.rowHeights.get(rowIndex);
     this.rowHeights.set(rowIndex, maxHeight);
@@ -819,24 +1104,31 @@ export class Renderer {
     const cell = createElement('div', 'ss-cell');
     cell.dataset.row = String(rowIndex);
     cell.dataset.col = String(colIndex);
-    
+
     const column = this.options.columns[colIndex];
     // 使用 getColumnOffsetDirect 确保与选区框计算一致
     const left = this.getColumnOffsetDirect(colIndex);
-    
+
+    // 判断是否是 wrapText 模式
+    const isWrapText = column?.wrapText === 'wrap' || column?.wrapText === 'fixed';
+
     setStyles(cell, {
       width: `${column?.width ?? 100}px`,
-      height: `${this.options.rowHeight}px`,
+      // wrapText 模式不设置固定高度，让内容自然撑开；其他模式使用默认行高
+      height: isWrapText ? '' : `${this.options.rowHeight}px`,
       minHeight: `${this.options.rowHeight}px`, // 确保最小高度，防止边框缺失
       left: `${left}px`,
       textAlign: column?.align || 'left',
-      // 关键修复：不在这里设置边框，完全依赖 CSS 类，确保边框始终显示
-      // 边框由 .ss-cell 类的 CSS 定义，不需要内联样式
     });
-    
-    // 确保单元格有边框类（通过 CSS 类控制边框，而不是内联样式）
+
+    // 如果是 wrapText 模式，添加标记
+    if (isWrapText) {
+      cell.classList.add('ss-cell-wrap-text');
+    }
+
+    // 确保单元格有边框类
     cell.classList.add('ss-cell');
-    
+
     return cell;
   }
 
@@ -1105,6 +1397,13 @@ export class Renderer {
     if (state.startRow >= 0 && state.endRow >= state.startRow) {
       // 即使 endRow 超出范围，也要渲染（可能是计算误差）
       this.renderRows(state);
+
+      // 首屏渲染后修正行高（使用 requestAnimationFrame 确保 DOM 已完成渲染）
+      if (this.rowCache.size > 0) {
+        requestAnimationFrame(() => {
+          this.correctVisibleRowHeights();
+        });
+      }
     }
   }
 
@@ -1292,10 +1591,16 @@ export class Renderer {
    */
   getTotalHeight(): number {
     let totalHeight = 0;
+    let maxRowIndex = -1;
     for (let i = 0; i < this.options.rowCount; i++) {
       const rowHeight = this.rowHeights.get(i) || this.options.rowHeight;
       totalHeight += rowHeight;
+      if (rowHeight > this.options.rowHeight) {
+        maxRowIndex = i;
+      }
     }
+    // 调试日志（可以删除）
+    // console.log(`[getTotalHeight] totalHeight: ${totalHeight}, rowCount: ${this.options.rowCount}, maxRowIndex: ${maxRowIndex}`);
     return totalHeight;
   }
 
@@ -1394,7 +1699,7 @@ export class Renderer {
     this.rowCache.clear();
     this.rendererCache.forEach(renderer => renderer.destroy?.());
     this.rendererCache.clear();
-    
+
     if (this.root) {
       this.root.remove();
     }
