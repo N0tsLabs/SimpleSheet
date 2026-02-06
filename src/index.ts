@@ -53,6 +53,13 @@ export { EmailRenderer } from './renderers/EmailRenderer';
 export { PhoneRenderer } from './renderers/PhoneRenderer';
 export { MultiLinkRenderer } from './renderers/MultiLinkRenderer';
 export { FileRenderer } from './renderers/FileRenderer';
+// 导出 wrapText 高度预计算相关函数
+export {
+  precalculateRowHeights,
+  cleanupMeasurementContainer,
+  setPrecalculateMode,
+  isPrecalculateMode,
+} from './renderers/TextRenderer';
 
 // 导出编辑器
 export { BaseEditor } from './editors/BaseEditor';

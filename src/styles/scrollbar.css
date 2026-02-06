@@ -33,14 +33,15 @@
   scrollbar-color: var(--ss-scrollbar-thumb) var(--ss-scrollbar-track);
 }
 
-/* 滚动条出现/隐藏的平滑过渡 */
-.ss-scroll-container {
-  overflow: overlay;
+/* 滚动条区域：阻止事件透传 */
+.ss-scroll-container::-webkit-scrollbar-track,
+.ss-scroll-container::-webkit-scrollbar-thumb,
+.ss-scroll-container::-webkit-scrollbar-corner {
+  pointer-events: auto;
 }
 
-@supports not (overflow: overlay) {
-  .ss-scroll-container {
-    overflow: auto;
-  }
+/* Firefox: 滚动条轨道也需要阻止事件透传 */
+.ss-scroll-container {
+  overflow: auto;
 }
 
