@@ -53,6 +53,7 @@ const DEFAULT_OPTIONS: Required<Omit<SheetOptions, 'columns' | 'toastMessages' |
   allowInsertColumn: true,
   allowDeleteColumn: true,
   virtualScrollBuffer: 5,
+  rowHeights: new Map<number, number>(),
 };
 
 export class Sheet extends EventEmitter<SheetEventMap> {
@@ -122,6 +123,8 @@ export class Sheet extends EventEmitter<SheetEventMap> {
       rowNumberWidth: this.options.rowNumberWidth,
       virtualScrollBuffer: this.options.virtualScrollBuffer,
       verticalPadding: this.options.verticalPadding,
+      // 传递预计算的行高
+      rowHeights: this.options.rowHeights,
     });
     
     // 初始化自动填充插件

@@ -21,3 +21,11 @@ export { PhoneRenderer } from './PhoneRenderer';
 export { MultiLinkRenderer } from './MultiLinkRenderer';
 export { FileRenderer } from './FileRenderer';
 
+// 导出 wrapText 高度预计算相关函数
+export {
+  precalculateRowHeights,
+  cleanupMeasurementContainer,
+  setPrecalculateMode,
+  isPrecalculateMode,
+} from './TextRenderer';
+

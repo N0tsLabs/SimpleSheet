@@ -70,10 +70,11 @@ export interface FileUploadResult {
 /**
  * 多行文本显示模式
  */
-export type WrapTextMode = 
+export type WrapTextMode =
   | false           // 不换行，溢出省略
   | 'ellipsis'      // 显示第一行+省略号，点击可预览
-  | 'wrap';         // 自动换行，行高自适应
+  | 'wrap'          // 自动换行，行高自适应（需要配合 rowHeights 选项使用）
+  | 'fixed';        // 自动换行，但不自动调整行高，使用固定行高
 
 /**
  * 列定义
@@ -253,6 +254,8 @@ export interface SheetOptions {
   virtualScrollBuffer?: number;
   /** 表格上下边距（像素），用于压缩空间展示更多数据 */
   verticalPadding?: number;
+  /** 预计算的行高（用于 wrapText 模式），Map<rowIndex, height> */
+  rowHeights?: Map<number, number>;
   /** 提示文本配置 */
   toastMessages?: {
     /** 只读单元格双击提示 */
