@@ -1704,5 +1704,56 @@ export class Renderer {
       this.root.remove();
     }
   }
+
+  // ===== 排序指示器 =====
+
+  /** 当前排序的列索引 */
+  private sortColumnIndex: number | null = null;
+
+  /** 当前排序方向 */
+  private sortDirection: 'asc' | 'desc' | null = null;
+
+  /**
+   * 更新表头排序指示器
+   */
+  updateSortIndicator(colIndex: number, direction: 'asc' | 'desc' | null): void {
+    // 清除旧的排序样式
+    if (this.sortColumnIndex !== null && this.sortColumnIndex !== colIndex) {
+      const oldHeaderCell = this.headerRow?.querySelector(`[data-col="${this.sortColumnIndex}"]`) as HTMLElement;
+      if (oldHeaderCell) {
+        oldHeaderCell.classList.remove('ss-sort-asc', 'ss-sort-desc');
+      }
+    }
+
+    // 清除当前列的旧样式
+    const headerCell = this.headerRow?.querySelector(`[data-col="${colIndex}"]`) as HTMLElement;
+    if (headerCell) {
+      // 清除所有排序相关的样式
+      headerCell.classList.remove('ss-sort-asc', 'ss-sort-desc');
+
+      if (direction) {
+        // 添加新的排序样式（CSS 使用 ::before 显示箭头）
+        headerCell.classList.add(`ss-sort-${direction}`);
+      }
+    }
+
+    // 更新状态
+    this.sortColumnIndex = colIndex;
+    this.sortDirection = direction;
+  }
+
+  /**
+   * 清除所有排序指示器
+   */
+  clearAllSortIndicators(): void {
+    if (this.sortColumnIndex !== null) {
+      const headerCell = this.headerRow?.querySelector(`[data-col="${this.sortColumnIndex}"]`) as HTMLElement;
+      if (headerCell) {
+        headerCell.classList.remove('ss-sort-asc', 'ss-sort-desc');
+      }
+    }
+    this.sortColumnIndex = null;
+    this.sortDirection = null;
+  }
 }
 

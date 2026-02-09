@@ -35,7 +35,19 @@ export type {
   WrapTextMode,
   FileUploader,
   FileUploadResult,
+  SortEvent,
+  SortCustomEvent,
 } from './types';
+
+// 导出右键菜单插件
+export {
+  ContextMenu,
+  createDefaultMenuItems,
+  createHeaderMenuItems,
+  createRowNumberMenuItems,
+  type MenuItem,
+  type MenuContext,
+} from './plugins/ContextMenu';
 
 // 导出渲染器
 export { BaseRenderer } from './renderers/BaseRenderer';
@@ -53,6 +65,7 @@ export { EmailRenderer } from './renderers/EmailRenderer';
 export { PhoneRenderer } from './renderers/PhoneRenderer';
 export { MultiLinkRenderer } from './renderers/MultiLinkRenderer';
 export { FileRenderer } from './renderers/FileRenderer';
+
 // 导出 wrapText 高度预计算相关函数
 export {
   precalculateRowHeights,
@@ -69,8 +82,6 @@ export { DateEditor } from './editors/DateEditor';
 export { SelectEditor } from './editors/SelectEditor';
 
 // 导出插件
-export { ContextMenu, createDefaultMenuItems, createHeaderMenuItems, createRowNumberMenuItems } from './plugins/ContextMenu';
-export type { MenuItem, MenuContext } from './plugins/ContextMenu';
 export { ColumnResizer } from './plugins/ColumnResizer';
 export { AutoFill } from './plugins/AutoFill';
 export { ColumnReorder } from './plugins/ColumnReorder';
@@ -78,9 +89,9 @@ export { RowReorder } from './plugins/RowReorder';
 export { ColumnTypePicker, COLUMN_TYPES, createColumnByType } from './plugins/ColumnTypePicker';
 export { MultiValueEditor, showMultiValueEditor } from './plugins/MultiValueEditor';
 export { FilePasteHandler } from './plugins/FilePasteHandler';
-export { 
-  ColumnConfigDialog, 
-  showCreateColumnDialog, 
+export {
+  ColumnConfigDialog,
+  showCreateColumnDialog,
   showEditColumnDialog,
   DATE_FORMATS,
   NUMBER_PREFIXES,
@@ -91,7 +102,7 @@ export { Validator, ValidationRules } from './plugins/Validator';
 export type { ValidationRule, ValidationResult, ValidatorType } from './plugins/Validator';
 
 export { Sorter } from './plugins/Sorter';
-export type { SortConfig, SortDirection, SortComparator } from './plugins/Sorter';
+export type { SortConfig, SortComparator } from './plugins/Sorter';
 
 export { Filter, FilterConditions } from './plugins/Filter';
 export type { FilterCondition, FilterOperator, ColumnFilterValues } from './plugins/Filter';
@@ -119,4 +130,3 @@ export {
 // 导出提示组件
 export { Toast, showToast } from './utils/Toast';
 export type { ToastType, ToastOptions } from './utils/Toast';
-

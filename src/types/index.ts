@@ -77,6 +77,11 @@ export type WrapTextMode =
   | 'fixed';        // 自动换行，但不自动调整行高，使用固定行高
 
 /**
+ * 排序方向
+ */
+export type SortDirection = 'asc' | 'desc' | null;
+
+/**
  * 列定义
  */
 export interface Column {
@@ -134,6 +139,125 @@ export interface Column {
   // ===== 日期类型配置 =====
   /** 日期格式（type 为 date 时使用） */
   dateFormat?: string;
+
+  // ===== 右键菜单配置 =====
+  /** 右键菜单配置（可选） */
+  contextMenu?: ColumnContextMenuConfig;
+}
+
+/**
+ * 列级右键菜单配置
+ */
+export interface ColumnContextMenuConfig {
+  /** 禁用该列的复制功能（默认 false） */
+  disableCopy?: boolean;
+  /** 禁用该列的剪切功能（默认 false） */
+  disableCut?: boolean;
+  /** 禁用该列的粘贴功能（默认 false） */
+  disablePaste?: boolean;
+  /** 禁用该列的清空功能（默认 false） */
+  disableClear?: boolean;
+  /** 禁用该列的排序功能（默认 false） */
+  disableSort?: boolean;
+}
+
+/**
+ * 表格级右键菜单配置
+ */
+export interface ContextMenuOptions {
+  /** ===== 基础操作 ===== */
+  /** 显示复制菜单项（默认 true） */
+  showCopy?: boolean;
+  /** 显示剪切菜单项（默认 true） */
+  showCut?: boolean;
+  /** 显示粘贴菜单项（默认 true） */
+  showPaste?: boolean;
+  /** 显示全选菜单项（默认 true） */
+  showSelectAll?: boolean;
+
+  /** ===== 行操作 ===== */
+  /** 显示向上插入行（默认 true） */
+  showInsertRowAbove?: boolean;
+  /** 显示向下插入行（默认 true） */
+  showInsertRowBelow?: boolean;
+  /** 显示删除行（默认 true） */
+  showDeleteRow?: boolean;
+  /** 显示清空行（默认 true） */
+  showClearRow?: boolean;
+
+  /** ===== 列操作 ===== */
+  /** 显示向左插入列（默认 true） */
+  showInsertColumnLeft?: boolean;
+  /** 显示向右插入列（默认 true） */
+  showInsertColumnRight?: boolean;
+  /** 显示删除列（默认 true） */
+  showDeleteColumn?: boolean;
+  /** 显示清空列（默认 true） */
+  showClearColumn?: boolean;
+
+  /** ===== 排序和筛选 ===== */
+  /** 显示升序排序（默认 true） */
+  showSortAsc?: boolean;
+  /** 显示降序排序（默认 true） */
+  showSortDesc?: boolean;
+  /** 显示取消排序（默认 true） */
+  showSortCancel?: boolean;
+  /** 显示筛选菜单（默认 true） */
+  showFilter?: boolean;
+
+  /** ===== 单元格操作 ===== */
+  /** 显示合并单元格（默认 true） */
+  showMergeCell?: boolean;
+  /** 显示取消合并（默认 true） */
+  showUnmergeCell?: boolean;
+
+  /** ===== 自定义菜单项 ===== */
+  /** 自定义菜单项 */
+  customItems?: MenuItem[];
+}
+
+/**
+ * 右键菜单项
+ */
+export interface MenuItem {
+  /** 菜单项标识 */
+  key?: string;
+  /** 显示文本 */
+  label: string;
+  /** 图标（可选） */
+  icon?: string;
+  /** 快捷键提示（可选） */
+  shortcut?: string;
+  /** 是否禁用（可选） */
+  disabled?: boolean;
+  /** 是否隐藏（可选） */
+  hidden?: boolean;
+  /** 分隔线 */
+  type?: 'divider';
+  /** 子菜单（可选） */
+  children?: MenuItem[];
+  /** 点击事件 */
+  action?: (context: MenuContext) => void;
+}
+
+/**
+ * 右键菜单上下文
+ */
+export interface MenuContext {
+  /** 点击位置 */
+  position: CellPosition | null;
+  /** 当前选区 */
+  selection: SelectionRange[];
+  /** 选中的单元格 */
+  selectedCells: CellPosition[];
+  /** 原始鼠标事件 */
+  originalEvent: MouseEvent;
+  /** 点击区域类型 */
+  clickArea?: 'cell' | 'header' | 'rowNumber' | 'corner';
+  /** 如果点击表头，包含列索引 */
+  headerColIndex?: number;
+  /** 如果点击行号，包含行索引 */
+  rowNumberIndex?: number;
 }
 
 /**
@@ -256,6 +380,10 @@ export interface SheetOptions {
   verticalPadding?: number;
   /** 预计算的行高（用于 wrapText 模式），Map<rowIndex, height> */
   rowHeights?: Map<number, number>;
+  /** 启用右键菜单（默认 true） */
+  enableContextMenu?: boolean;
+  /** 右键菜单配置 */
+  contextMenuOptions?: ContextMenuOptions;
   /** 提示文本配置 */
   toastMessages?: {
     /** 只读单元格双击提示 */
@@ -357,6 +485,10 @@ export interface SheetEventMap {
   // 历史事件
   'undo': HistoryEvent;
   'redo': HistoryEvent;
+
+  // 排序事件
+  'sort:change': SortEvent;
+  'sort:custom': SortCustomEvent;
 }
 
 /**
@@ -467,5 +599,33 @@ export interface VirtualScrollState {
   offsetY: number;
   /** 水平偏移 */
   offsetX: number;
+}
+
+/**
+ * 排序事件
+ */
+export interface SortEvent {
+  /** 排序列索引 */
+  column: number;
+  /** 排序方向 */
+  direction: 'asc' | 'desc' | null;
+  /** 当前数据 */
+  data: RowData[];
+}
+
+/**
+ * 自定义排序事件（用于远程排序）
+ */
+export interface SortCustomEvent {
+  /** 排序列索引 */
+  column: number;
+  /** 排序方向 */
+  direction: 'asc' | 'desc';
+  /** 阻止默认排序行为 */
+  preventDefault: () => void;
+  /** 获取当前数据 */
+  getData: () => RowData[];
+  /** 设置排序后的数据 */
+  setData: (data: RowData[]) => void;
 }
 
