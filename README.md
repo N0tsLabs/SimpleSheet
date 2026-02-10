@@ -23,6 +23,9 @@
 - **多值编辑** - 支持邮箱、手机号、链接等字段的多值编辑
 - **文件粘贴** - 支持直接粘贴图片文件
 - **自动填充** - 支持拖拽填充数据
+- **列宽调整** - 拖拽调整列宽
+- **自定义悬浮窗** - 支持文本、链接、邮箱、电话、标签等多种内容类型
+- **下拉多选** - 支持单选/多选模式下拉选择
 
 ## 安装
 
@@ -62,12 +65,14 @@ const sheet = new SimpleSheet('#container', {
 
 包含：
 - 完整的配置选项说明
-- 列定义详解
+- 列定义详解（下拉多选、自定义悬浮窗等）
 - 数据和选区操作
 - 事件系统
 - 主题定制
 - 内置渲染器和编辑器
 - 插件系统（验证、排序、筛选、搜索、合并、冻结、条件格式等）
+- 自定义悬浮窗详解
+- 列宽调整
 - 快捷键参考
 - 常见问题
 
@@ -130,6 +135,10 @@ interface Column {
   headerBgColor?: string;    // 表头背景颜色
   headerTextColor?: string;  // 表头文字颜色
 
+  // ===== 下拉选项配置 =====
+  options?: SelectOption[];  // 下拉选项
+  multiple?: boolean;        // 是否支持多选（select 类型）
+
   // ===== 数字格式 =====
   decimalPlaces?: number;           // 小数位数
   numberPrefix?: string;             // 数字前缀（如 ¥）
@@ -139,8 +148,15 @@ interface Column {
   // ===== 日期格式 =====
   dateFormat?: string;       // 日期格式
 
+  // ===== 文本换行配置 =====
+  wrapText?: WrapTextMode;   // 多行文本显示模式
+  maxLines?: number;         // 最大显示行数
+
   // ===== 右键菜单配置 =====
   contextMenu?: ColumnContextMenuConfig;  // 列级右键菜单配置
+
+  // ===== 自定义悬浮窗配置 =====
+  expandPopover?: ExpandPopoverConfig;  // 点击单元格时显示的悬浮窗
 }
 ```
 
