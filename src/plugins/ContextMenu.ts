@@ -4,6 +4,7 @@
 
 import { createElement, setStyles, addEvent } from '../utils/dom';
 import type { CellPosition, SelectionRange } from '../types';
+import { hidePopover } from './CustomPopover';
 
 export interface MenuItem {
   /** 菜单项标识 */
@@ -148,6 +149,9 @@ export class ContextMenu {
    * 显示菜单
    */
   show(x: number, y: number, context: MenuContext): void {
+    // 先关闭悬浮窗
+    hidePopover();
+
     if (!this.menuElement) {
       console.warn('ContextMenu: menuElement is null');
       return;

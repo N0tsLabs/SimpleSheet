@@ -117,12 +117,13 @@ const columns = ref<Column[]>([
     dateFormat: 'YYYY-MM-DD',
   },
   { key: 'website', title: '个人主页', width: 160, type: 'link' as const },
-  { 
-    key: 'tags', 
-    title: '标签', 
-    width: 180, 
-    type: 'select' as const, 
+  {
+    key: 'tags',
+    title: '标签',
+    width: 180,
+    type: 'select' as const,
     options: tagOptions,
+    multiple: true, // 支持多选
   },
   { key: 'attachments', title: '附件', width: 120, type: 'file' as const },
   { key: 'remark', title: '备注', width: 200, wrapText: 'ellipsis' as const },
@@ -446,6 +447,9 @@ const initSheet = async () => {
     getHeaderHeight: () => 40,
     showRowNumber: true,
     rowNumberWidth: 50,
+    clearSelection: () => {
+      sheet?.clearSelection();
+    },
   });
   columnReorder.mount(sheetContainer.value);
 

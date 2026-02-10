@@ -12,16 +12,16 @@ export const COLUMN_TYPES: ColumnTypeConfig[] = [
   { type: 'text', label: '文本', icon: 'A', group: '基础' },
   { type: 'number', label: '数字', icon: '123', group: '基础' },
   { type: 'date', label: '日期', icon: '📅', group: '基础' },
-  { type: 'select', label: '单选', icon: '◉', group: '基础' },
-  
+  { type: 'select', label: '选项', icon: '◉', group: '基础', description: '支持单选/多选' },
+
   // 联系方式
   { type: 'phone', label: '手机号', icon: '📱', group: '联系方式', description: '支持多个' },
   { type: 'email', label: '邮箱', icon: '✉️', group: '联系方式', description: '支持多个' },
   { type: 'link', label: '链接', icon: '🔗', group: '联系方式', description: '支持多个' },
-  
+
   // 媒体
   { type: 'file', label: '文件/图片', icon: '📎', group: '媒体' },
-  
+
   // 其他
   { type: 'boolean', label: '复选框', icon: '☑️', group: '其他' },
 ];

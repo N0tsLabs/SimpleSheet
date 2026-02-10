@@ -79,7 +79,7 @@ const columns = ref<Column[]>([
   { key: 'performance', title: '绩效', width: 80, type: 'number' as const, sortable: true, decimalPlaces: 1 },
   { key: 'isFullTime', title: '全职', width: 70, type: 'boolean' as const },
   { key: 'joinDate', title: '入职日期', width: 120, type: 'date' as const, dateFormat: 'YYYY-MM-DD' },
-  { key: 'tags', title: '标签', width: 180, type: 'select' as const, options: tagOptions },
+  { key: 'tags', title: '标签', width: 180, type: 'select' as const, options: tagOptions, multiple: true },
 ]);
 
 const departments = ['技术部', '产品部', '设计部', '市场部', '运营部'];
@@ -277,6 +277,9 @@ const initSheet = async () => {
     getHeaderHeight: () => 40,
     showRowNumber: true,
     rowNumberWidth: 50,
+    clearSelection: () => {
+      sheet?.clearSelection();
+    },
   });
   columnReorder.mount(sheetContainer.value);
 

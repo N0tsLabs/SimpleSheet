@@ -767,3 +767,286 @@
   color: #fff;
 }
 
+/* ========================================
+   自定义悬浮窗
+   ======================================== */
+
+.ss-custom-popover {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  padding: 12px;
+  min-width: 180px;
+  max-width: 300px;
+  animation: ss-popover-in 0.15s ease;
+}
+
+.ss-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.ss-popover-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+
+.ss-popover-close {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #999;
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.ss-popover-close:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.ss-popover-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 文本内容 */
+.ss-popover-text {
+  font-size: 13px;
+  color: #333;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* HTML 内容 */
+.ss-popover-html {
+  font-size: 13px;
+  color: #333;
+  line-height: 1.5;
+}
+
+.ss-popover-html img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* 链接/邮箱/电话信息行 */
+.ss-popover-info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #f5f5f5;
+  border-radius: 6px;
+}
+
+.ss-popover-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.ss-popover-info-row .ss-popover-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 标签 */
+.ss-popover-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ss-popover-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.ss-popover-tag-plain {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+}
+
+/* 标签选择列表 */
+.ss-popover-tags-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.ss-popover-tag-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.ss-popover-tag-item:hover {
+  background: #f5f5f5;
+  border-color: #e5e5e5;
+}
+
+.ss-popover-tag-item-selected {
+  background: #eff6ff;
+  border-color: #3b82f6;
+}
+
+.ss-popover-tag-item-selected .ss-popover-tag {
+  font-weight: 600;
+}
+
+.ss-popover-tag-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #3b82f6;
+  flex-shrink: 0;
+}
+
+.ss-popover-count {
+  font-size: 12px;
+  color: #666;
+  font-weight: normal;
+}
+
+/* 自定义内容 */
+.ss-popover-custom {
+  width: 100%;
+}
+
+/* 操作按钮组 */
+.ss-popover-actions,
+.ss-popover-extra-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ss-popover-actions {
+  justify-content: flex-end;
+  padding-top: 8px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.ss-popover-extra-actions {
+  padding-top: 8px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.ss-popover-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border: none;
+  background: #f0f0f0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #666;
+  transition: all 0.15s ease;
+}
+
+.ss-popover-btn:hover {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.ss-popover-btn-primary {
+  background: var(--ss-primary-color, #3b82f6);
+  color: #fff;
+}
+
+.ss-popover-btn-primary:hover {
+  background: #2563eb;
+  color: #fff;
+}
+
+.ss-popover-btn-success {
+  background: #10b981;
+  color: #fff;
+}
+
+.ss-popover-btn-success:hover {
+  background: #059669;
+  color: #fff;
+}
+
+/* 暗色主题 */
+[data-theme="dark"] .ss-custom-popover {
+  background: #2a2a3e;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .ss-popover-header {
+  border-color: #3a3a4e;
+}
+
+[data-theme="dark"] .ss-popover-title {
+  color: #e0e0e0;
+}
+
+[data-theme="dark"] .ss-popover-close:hover {
+  background: #3a3a4e;
+  color: #fff;
+}
+
+[data-theme="dark"] .ss-popover-text {
+  color: #e0e0e0;
+}
+
+[data-theme="dark"] .ss-popover-html {
+  color: #e0e0e0;
+}
+
+[data-theme="dark"] .ss-popover-info-row {
+  background: #1a1a2e;
+}
+
+[data-theme="dark"] .ss-popover-tag-plain {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e0e0e0;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+[data-theme="dark"] .ss-popover-actions,
+[data-theme="dark"] .ss-popover-extra-actions {
+  border-color: #3a3a4e;
+}
+
+[data-theme="dark"] .ss-popover-btn {
+  background: #3a3a4e;
+  color: #aaa;
+}
+
+[data-theme="dark"] .ss-popover-btn:hover {
+  background: #4a4a5e;
+  color: #fff;
+}
+

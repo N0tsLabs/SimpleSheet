@@ -113,6 +113,8 @@ export interface Column {
   formatter?: (value: any, rowData: RowData, column: Column) => string;
   /** 下拉选项（type 为 select 时使用） */
   options?: SelectOption[];
+  /** 是否支持多选（type 为 select 时使用） */
+  multiple?: boolean;
   /** 多行文本显示模式 */
   wrapText?: WrapTextMode;
   /** 最大显示行数（超过此行数显示省略号），仅在 wrapText 为 'wrap' 时生效 */
@@ -143,6 +145,10 @@ export interface Column {
   // ===== 右键菜单配置 =====
   /** 右键菜单配置（可选） */
   contextMenu?: ColumnContextMenuConfig;
+
+  // ===== 自定义悬浮窗配置 =====
+  /** 自定义悬浮窗配置（点击单元格时显示） */
+  expandPopover?: ExpandPopoverConfig;
 }
 
 /**
@@ -627,5 +633,88 @@ export interface SortCustomEvent {
   getData: () => RowData[];
   /** 设置排序后的数据 */
   setData: (data: RowData[]) => void;
+}
+
+/**
+ * 悬浮窗内容类型
+ */
+export type PopoverContentType =
+  | 'text'        // 纯文本
+  | 'html'         // HTML 内容
+  | 'link'         // 链接（显示地址 + 复制/打开按钮）
+  | 'email'        // 邮箱（显示地址 + 复制/发送邮件按钮）
+  | 'phone'        // 电话（显示号码 + 复制/拨打按钮）
+  | 'tags'         // 标签列表
+  | 'custom';      // 自定义内容
+
+/**
+ * 悬浮窗操作按钮配置
+ */
+export interface PopoverAction {
+  /** 按钮标签 */
+  label: string;
+  /** 按钮图标（SVG 或 emoji） */
+  icon?: string;
+  /** 是否为主要按钮样式 */
+  primary?: boolean;
+  /** 点击事件 */
+  action: (value: any, close: () => void) => void;
+}
+
+/**
+ * 悬浮窗配置
+ */
+export interface ExpandPopoverConfig {
+  /** 悬浮窗类型 */
+  type: PopoverContentType;
+
+  /** ===== 通用配置 ===== */
+  /** 悬浮窗宽度 */
+  width?: number;
+  /** 最大宽度（默认 300） */
+  maxWidth?: number;
+  /** 悬浮窗标题 */
+  title?: string;
+  /** 是否显示关闭按钮 */
+  showClose?: boolean;
+
+  /** ===== 文本/HTML 内容配置 ===== */
+  /** 当 type 为 text/html 时使用 */
+  content?: string;
+
+  /** ===== 链接/邮箱/电话配置 ===== */
+  /** 值字段（从 rowData 中获取） */
+  valueField?: string;
+  /** 显示文本字段（可选，默认使用值） */
+  displayField?: string;
+
+  /** ===== 标签配置 ===== */
+  /** 标签值字段（从 rowData 中获取，支持数组或逗号分隔字符串） */
+  tagsField?: string;
+  /** 标签选项配置 */
+  tagOptions?: Array<{
+    value: any;
+    label: string;
+    color?: string;
+    textColor?: string;
+  }>;
+  /** 是否支持多选（默认 false） */
+  multiple?: boolean;
+  /** 值变化回调（用于 select/tags 类型） */
+  onChange?: (value: any) => void;
+
+  /** ===== 自定义内容配置 ===== */
+  /** 自定义渲染函数 */
+  render?: (value: any, rowData: RowData) => HTMLElement | string;
+
+  /** ===== 操作按钮配置 ===== */
+  /** 额外操作按钮 */
+  actions?: PopoverAction[];
+
+  /** ===== 行为配置 ===== */
+  /** 点击悬浮窗外部是否自动关闭（默认 true） */
+  closeOnBlur?: boolean;
+  /** 双击悬浮窗是否进入编辑模式（默认 false） */
+  dblClickToEdit?: boolean;
 }
 

@@ -25,11 +25,23 @@ interface ColumnReorderOptions {
   showRowNumber?: boolean;
   /** 行号列宽度 */
   rowNumberWidth?: number;
+  /** 拖拽完成后清除选区回调 */
+  clearSelection?: () => void;
+}
+
+interface ColumnReorderPrivateOptions {
+  getColumns: () => Column[];
+  setColumns: (columns: Column[]) => void;
+  getColumnWidth: (index: number) => number;
+  getHeaderHeight: () => number;
+  showRowNumber: boolean;
+  rowNumberWidth: number;
 }
 
 export class ColumnReorder extends EventEmitter<ColumnReorderEvents> {
   private container: HTMLElement | null = null;
-  private options: Required<ColumnReorderOptions>;
+  private options: ColumnReorderPrivateOptions;
+  private clearSelectionFn: (() => void) | undefined;
   private isDragging = false;
   private dragIndex = -1;
   private dropIndex = -1;
@@ -52,6 +64,7 @@ export class ColumnReorder extends EventEmitter<ColumnReorderEvents> {
       showRowNumber: options.showRowNumber ?? true,
       rowNumberWidth: options.rowNumberWidth ?? 50,
     };
+    this.clearSelectionFn = options.clearSelection;
   }
 
   /**
@@ -449,6 +462,9 @@ export class ColumnReorder extends EventEmitter<ColumnReorderEvents> {
         toIndex: this.dropIndex,
         columns,
       });
+
+      // 清除选区（避免列位置变化后选区高亮错误）
+      this.clearSelectionFn?.();
     }
 
     // 重置状态

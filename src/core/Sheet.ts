@@ -14,6 +14,7 @@ import { EditorManager } from "../editors/EditorManager";
 import { AutoFill } from "../plugins/AutoFill";
 import { RowReorder } from "../plugins/RowReorder";
 import { FilePasteHandler } from "../plugins/FilePasteHandler";
+import { ColumnResizer } from "../plugins/ColumnResizer";
 import type {
     FileUploader,
     SheetOptions,
@@ -27,16 +28,9 @@ import type {
 } from "../types";
 import { addEvent, addEvents, getMousePosition } from "../utils/dom";
 import { normalizeRange } from "../utils/helpers";
-import {
-    showExpandOverlay,
-    hideExpandOverlay,
-    setExpandOverlayDblClickHandler,
-    getCurrentExpandCell
-} from "../renderers/TextRenderer";
 import { createElement, setStyles } from "../utils/dom";
 import { showImagePreview } from "../plugins/ImageViewer";
-import { showLinkPopover, closeLinkPopover } from "../plugins/LinkPopover";
-import { showTagsPopover, closeTagsPopover } from "../plugins/TagsPopover";
+import { showPopover, hidePopover, setPopoverDblClickHandler } from "../plugins/CustomPopover";
 import { Toast } from "../utils/Toast";
 
 // 导入样式
@@ -81,6 +75,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     private autoFill: AutoFill;
     private rowReorder: RowReorder;
     private filePasteHandler: FilePasteHandler;
+    private columnResizer: ColumnResizer;
 
     private cleanupFns: Array<() => void> = [];
     private isDestroyed = false;
@@ -95,6 +90,18 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     // 排序状态
     private sortColumn: number | null = null;
     private sortDirection: 'asc' | 'desc' | null = null;
+    private originalDataBeforeSort: RowData[] = []; // 保存排序前的原始数据
+
+    // 表头拖拽状态（用于区分点击和拖拽）
+    private headerDragState: {
+      isDragging: boolean;
+      startX: number;
+      startY: number;
+      colIndex: number | null;
+    } = { isDragging: false, startX: 0, startY: 0, colIndex: null };
+
+    // 排序触发延迟（等待区分点击和拖拽）
+    private sortTriggerTimeout: number | null = null;
 
     constructor(container: string | HTMLElement, options: SheetOptions) {
         super();
@@ -180,6 +187,19 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                 this.renderer.refreshCell(row, col);
             },
             getCellValue: (row, col) => this.dataModel.getCellValue(row, col)
+        });
+
+        // 初始化列宽调整插件
+        this.columnResizer = new ColumnResizer({
+            getColumnWidth: (index) => this.options.columns[index]?.width ?? 100,
+            setColumnWidth: (index, width) => {
+                if (this.options.columns[index]) {
+                    this.options.columns[index].width = width;
+                    this.renderer.updateColumnWidth(index, width);
+                }
+            },
+            minWidth: 50,
+            maxWidth: 500
         });
 
         // 设置
@@ -274,27 +294,23 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             this.filePasteHandler.mount(root);
         }
 
-        // 绑定事件
-        this.bindEvents();
-
-        // 初始化时清理可能存在的预览浮层（防止切换表格时预览浮层残留）
-        const currentExpandCell = getCurrentExpandCell();
-        if (currentExpandCell) {
-            const root = this.renderer.getRoot();
-            // 如果当前展开的单元格不在当前表格中，清理预览
-            if (!root || !root.contains(currentExpandCell)) {
-                hideExpandOverlay();
-            }
+        // 挂载列宽调整插件
+        if (root) {
+            this.columnResizer.mount(root);
         }
 
-        // 设置展开浮层双击回调
-        setExpandOverlayDblClickHandler((cell) => {
-            const rowStr = cell.closest("[data-row]")?.getAttribute("data-row");
-            const colStr = cell.getAttribute("data-col");
-            if (rowStr && colStr) {
-                this.startEdit(parseInt(rowStr, 10), parseInt(colStr, 10));
-            }
+        // 处理列宽调整事件
+        this.columnResizer.on('resize:end', ({ columnIndex, oldWidth, newWidth }) => {
+            this.emit('column:resize' as any, {
+                index: columnIndex,
+                oldWidth,
+                newWidth,
+                column: this.options.columns[columnIndex]
+            });
         });
+
+        // 绑定事件
+        this.bindEvents();
 
         // 初始渲染
         this.renderer.render();
@@ -322,8 +338,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         // 键盘事件
         this.keyboardManager.on("keydown", () => {
             // 任何键盘操作都关闭悬浮窗
-            closeLinkPopover();
-            closeTagsPopover();
+            hidePopover();
         });
         this.keyboardManager.on("navigation", this.handleNavigation.bind(this));
         this.keyboardManager.on("enter", this.handleEnter.bind(this));
@@ -388,8 +403,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                 this.autoFill.hideHandle();
             }
 
-            // 处理多行文本展开显示
-            this.handleCellExpand(event.cells);
+            // 多行文本预览现在通过点击悬浮窗统一处理，不再使用展开覆盖层
         });
 
         // 自动填充事件
@@ -571,18 +585,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         }
 
         // 关闭已有的悬浮窗
-        closeLinkPopover();
-        closeTagsPopover();
-
-        // 如果点击的不是当前展开的单元格，关闭预览
-        const currentExpandCell = getCurrentExpandCell();
-        if (currentExpandCell) {
-            const clickedCell = target.closest(".ss-cell");
-            if (clickedCell !== currentExpandCell) {
-                // 点击了其他单元格，关闭预览
-                hideExpandOverlay();
-            }
-        }
+        hidePopover();
 
         // 如果点击的不是文件预览浮层，关闭文件预览
         if (this.currentFilePreview && !this.currentFilePreview.contains(target)) {
@@ -637,8 +640,27 @@ export class Sheet extends EventEmitter<SheetEventMap> {
 
                 // 检查是否可以排序
                 if (column?.sortable !== false && !e.shiftKey && !e.ctrlKey) {
-                    // 单击表头：触发排序
-                    this.handleHeaderSort(colIndex, column);
+                    // 记录拖拽起始位置
+                    this.headerDragState = {
+                        isDragging: false,
+                        startX: e.clientX,
+                        startY: e.clientY,
+                        colIndex
+                    };
+
+                    // 延迟触发排序，等待区分点击和拖拽
+                    if (this.sortTriggerTimeout) {
+                        clearTimeout(this.sortTriggerTimeout);
+                    }
+                    this.sortTriggerTimeout = window.setTimeout(() => {
+                        // 如果没有发生拖拽（移动距离小于5px），则触发排序
+                        if (this.headerDragState.colIndex === colIndex &&
+                            !this.headerDragState.isDragging) {
+                            this.handleHeaderSort(colIndex, column);
+                        }
+                        this.headerDragState.colIndex = null;
+                    }, 150) as unknown as number;
+
                     return;
                 }
 
@@ -699,8 +721,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
 
             if (!this.options.readonly) {
                 // 双击 - 进入编辑模式
-                closeLinkPopover();
-                closeTagsPopover();
+                hidePopover();
                 this.startEdit(cell.row, cell.col);
 
                 this.emit("cell:dblclick", {
@@ -733,6 +754,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         // 根据列类型显示对应的悬浮窗
         const column = this.options.columns[cell.col];
         const cellValue = this.dataModel.getCellValue(cell.row, cell.col);
+        const rowData = this.dataModel.getRowData(cell.row) || {};
 
         if (column && cellValue) {
             // 获取单元格 DOM 元素用于定位悬浮窗
@@ -743,47 +765,45 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                     // 文件类型 - 显示文件列表预览
                     this.showFilePreview(cellEl, cellValue, cell.row, cell.col);
                 } else if (column.type === "link" || column.type === "email" || column.type === "phone") {
-                    // 链接/邮箱/电话类型 - 显示 LinkPopover
-                    showLinkPopover({
+                    // 链接/邮箱/电话类型 - 显示悬浮窗
+                    showPopover(cellEl, cellValue, rowData, {
                         type: column.type,
-                        value: String(cellValue),
-                        cell: cellEl
+                        valueField: column.key,
                     });
                 } else if (column.type === "select") {
-                    // 多选/标签类型（select）- 显示 TagsPopover
-                    // 检查是否是多选（数组值）或单选
-                    const isMultiple = Array.isArray(cellValue);
-                    const values = isMultiple ? cellValue : cellValue ? [cellValue] : [];
-
-                    showTagsPopover({
-                        values: values,
-                        options: column.options || [],
-                        cell: cellEl,
-                        multiple: true, // 支持多选
-                        onChange: (newValues: any[]) => {
-                            // 更新单元格值（select类型默认支持多选，除非明确设置为单选）
-                            // 检查值是否为数组来判断是否多选
-                            const isMultiple = Array.isArray(cellValue);
-                            const finalValue = isMultiple ? newValues : newValues.length > 0 ? newValues[0] : null;
-                            this.dataModel.setCellValue(cell.row, cell.col, finalValue);
+                    // 标签类型（select）- 显示标签悬浮窗
+                    showPopover(cellEl, cellValue, rowData, {
+                        type: 'tags',
+                        tagsField: column.key,
+                        tagOptions: column.options?.map(opt => ({
+                            value: opt.value,
+                            label: opt.label,
+                            color: opt.color,
+                            textColor: opt.textColor
+                        })) || [],
+                        multiple: column.multiple ?? false, // 使用列配置的多选属性，默认单选
+                        onChange: (newValue: any) => {
+                            // 更新单元格值
+                            this.dataModel.setCellValue(cell.row, cell.col, newValue);
                             // 重新渲染单元格
                             this.renderer.render();
                             // 触发数据变更事件
                             this.emit("data:change", {
                                 type: "set",
-                                changes: [
-                                    {
-                                        row: cell.row,
-                                        col: cell.col,
-                                        oldValue: cellValue,
-                                        newValue: finalValue
-                                    }
-                                ]
+                                changes: [{
+                                    row: cell.row,
+                                    col: cell.col,
+                                    oldValue: cellValue,
+                                    newValue
+                                }]
                             });
                         }
                     });
+                } else if (column.expandPopover) {
+                    // 自定义悬浮窗配置
+                    showPopover(cellEl, cellValue, rowData, column.expandPopover);
                 } else {
-                    // 检查是否是多行文本，如果是，显示预览
+                    // 检查是否是多行文本，如果是，使用悬浮窗显示预览
                     // 注意：这里需要检查 wrapText 配置，如果配置了换行，即使没有省略号也应该显示预览
                     const fullText = cellEl.getAttribute("data-full-text");
                     if (fullText) {
@@ -795,9 +815,12 @@ export class Sheet extends EventEmitter<SheetEventMap> {
 
                         // 如果配置了换行模式（wrapText 为 'wrap'），或者包含换行符，或者有省略号，则显示预览
                         if (wrapText === "wrap" || hasNewlines || hasEllipsis) {
-                            // 延迟一点执行，确保选中状态已经更新
-                            requestAnimationFrame(() => {
-                                this.handleCellExpand([{ row: cell.row, col: cell.col }]);
+                            // 使用统一的悬浮窗显示完整文本（不显示标题）
+                            showPopover(cellEl, fullText, rowData, {
+                                type: 'text',
+                                content: fullText, // 使用 content 字段传递完整文本
+                                width: column.width,
+                                maxWidth: 400
                             });
                         }
                     }
@@ -823,7 +846,17 @@ export class Sheet extends EventEmitter<SheetEventMap> {
      * 处理鼠标移动
      */
     private handleMouseMove(e: MouseEvent): void {
-        if (!this.selectionManager.isDragging()) return;
+        if (!this.selectionManager.isDragging()) {
+            // 检测表头拖拽（区分点击和拖拽）
+            if (this.headerDragState.colIndex !== null && !this.headerDragState.isDragging) {
+                const dx = Math.abs(e.clientX - this.headerDragState.startX);
+                const dy = Math.abs(e.clientY - this.headerDragState.startY);
+                if (dx > 5 || dy > 5) {
+                    this.headerDragState.isDragging = true;
+                }
+            }
+            return;
+        }
 
         const root = this.renderer.getRoot();
         if (!root) return;
@@ -862,6 +895,9 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         }
         this.lastDragCell = null;
         this.selectionManager.endDragSelection();
+
+        // 只清除拖拽状态，不清除 colIndex（让超时回调来处理排序）
+        this.headerDragState.isDragging = false;
     }
 
     /**
@@ -1004,6 +1040,9 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             fileItem.style.cursor = "pointer";
             fileItem.addEventListener("click", (e) => {
                 e.stopPropagation();
+                // 先关闭预览和悬浮窗，再打开链接
+                this.closeFilePreview();
+                hidePopover();
                 window.open(file.url, "_blank", "noopener,noreferrer");
             });
 
@@ -1037,92 +1076,21 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     }
 
     /**
+     * 关闭文件预览浮层
+     */
+    private closeFilePreview(): void {
+        if (this.currentFilePreview) {
+            this.currentFilePreview.remove();
+            this.currentFilePreview = null;
+            this.currentFilePreviewCell = null;
+        }
+    }
+
+    /**
      * 当前文件预览浮层
      */
     private currentFilePreview: HTMLElement | null = null;
     private currentFilePreviewCell: HTMLElement | null = null;
-
-    /**
-     * 处理单元格展开（多行文本选中时展示完整内容）
-     * 预览模式：像编辑模式一样展开单元格本身，显示完整内容
-     */
-    private handleCellExpand(selectedCells: CellPosition[]): void {
-        // 如果正在编辑，不显示展开
-        if (this.editorManager.isEditing()) {
-            hideExpandOverlay();
-            return;
-        }
-
-        // 检查当前展开的单元格是否还在当前表格中
-        const currentExpandCell = getCurrentExpandCell();
-        if (currentExpandCell) {
-            const root = this.renderer.getRoot();
-            // 如果展开的单元格不在当前表格中，隐藏预览
-            if (!root || !root.contains(currentExpandCell)) {
-                hideExpandOverlay();
-            }
-        }
-
-        // 只有选中单个单元格时才展开
-        if (selectedCells.length !== 1) {
-            hideExpandOverlay();
-            return;
-        }
-
-        const { row, col } = selectedCells[0];
-        const cellEl = this.renderer.getCellElement(row, col);
-
-        if (!cellEl) {
-            hideExpandOverlay();
-            return;
-        }
-
-        // 检查单元格是否有完整文本
-        const fullText = cellEl.getAttribute("data-full-text");
-        const column = this.options.columns[col];
-        const wrapText = column?.wrapText;
-
-        if (fullText) {
-            // 检查文本是否超出单元格宽度或高度（需要预览）
-            const cellText = cellEl.textContent || "";
-            const cellWidth = cellEl.clientWidth;
-            const cellHeight = cellEl.clientHeight;
-            const textWidth = cellEl.scrollWidth;
-            const textHeight = cellEl.scrollHeight;
-
-            // 检查是否有省略号（这是判断是否需要预览的关键）
-            const hasEllipsis = cellText.includes("...");
-
-            // 检查是否配置了最大行数限制
-            const maxLines = cellEl.getAttribute("data-lines");
-            const hasMaxLinesLimit = column?.maxLines && maxLines && parseInt(maxLines) >= column.maxLines;
-
-            // 检查文本是否超出单元格（即使没有省略号，如果文本超出也需要预览）
-            const isTextOverflowing = textWidth > cellWidth || textHeight > cellHeight;
-
-            // 只在以下情况显示预览：
-            // 1. 有省略号（文本被截断）
-            // 2. 配置了最大行数限制且达到了限制（即使没有省略号，也可能需要预览）
-            // 3. 文本超出单元格（即使配置了多行自适应，如果内容超出也需要预览）
-            // 注意：如果配置了 wrapText: 'wrap' 但没有省略号且内容没有超出，不显示预览
-            const shouldShowPreview = hasEllipsis || hasMaxLinesLimit || isTextOverflowing;
-
-            if (shouldShowPreview) {
-                // 预览模式：直接在单元格内展开显示完整文本，就像编辑模式一样
-                showExpandOverlay(cellEl, fullText);
-
-                // 重新渲染该单元格的行，以确保行高自适应（如果配置了换行）
-                // 注意：这里只更新行高，不重新渲染整个单元格内容（避免覆盖预览内容）
-                if (wrapText === "wrap") {
-                    this.renderer.render();
-                }
-            } else {
-                hideExpandOverlay();
-            }
-        } else {
-            hideExpandOverlay();
-        }
-    }
 
     /**
      * 处理方向键导航
@@ -1476,11 +1444,10 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         if (cellMeta?.readonly) return;
 
         // 关闭悬浮窗
-        closeLinkPopover();
-        closeTagsPopover();
+        hidePopover();
 
-        // 隐藏展开浮层（立即隐藏，避免动画闪烁）
-        hideExpandOverlay(true);
+        // 关闭悬浮窗
+        hidePopover();
 
         // 隐藏填充手柄
         this.autoFill.hideHandle();
@@ -1699,12 +1666,13 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             if (this.sortDirection === 'asc') {
                 direction = 'desc';
             } else if (this.sortDirection === 'desc') {
-                direction = null;  // 取消排序
+                direction = null;  // 取消排序，恢复原始顺序
             } else {
                 direction = 'asc';
             }
         } else {
-            // 新列：升序
+            // 新列：升序，并保存当前数据为原始数据
+            this.originalDataBeforeSort = [...this.dataModel.getData()];
             direction = 'asc';
         }
 
@@ -1712,10 +1680,14 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         this.sortColumn = colIndex;
         this.sortDirection = direction;
 
-        // 如果方向为 null，清除排序状态并返回
+        // 如果方向为 null，恢复原始数据并清除排序状态
         if (direction === null) {
             this.sortColumn = null;
             this.sortDirection = null;
+            // 恢复原始数据
+            this.dataModel.setData(this.originalDataBeforeSort);
+            this.originalDataBeforeSort = [];
+            this.renderer.render();
             // 触发排序变更事件
             this.emit('sort:change', {
                 column: colIndex,
@@ -1724,6 +1696,11 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             });
             this.renderer.updateSortIndicator(colIndex, null);
             return;
+        }
+
+        // 首次排序（非取消）时保存原始数据
+        if (this.originalDataBeforeSort.length === 0) {
+            this.originalDataBeforeSort = [...this.dataModel.getData()];
         }
 
         // 创建自定义排序事件（direction 不会为 null）
@@ -2324,8 +2301,8 @@ export class Sheet extends EventEmitter<SheetEventMap> {
 
         this.isDestroyed = true;
 
-        // 清理预览浮层
-        hideExpandOverlay();
+        // 关闭悬浮窗
+        hidePopover();
 
         // 清理事件监听
         this.cleanupFns.forEach((fn) => fn());
@@ -2337,6 +2314,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         this.autoFill.unmount();
         this.rowReorder.unmount();
         this.filePasteHandler.unmount();
+        this.columnResizer.unmount();
         this.renderer.destroy();
 
         // 清理事件
@@ -2346,6 +2324,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         this.autoFill.removeAllListeners();
         this.rowReorder.removeAllListeners();
         this.filePasteHandler.removeAllListeners();
+        this.columnResizer.removeAllListeners();
         this.removeAllListeners();
 
         // 清空容器

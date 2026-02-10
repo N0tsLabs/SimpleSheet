@@ -268,6 +268,9 @@ onMounted(async () => {
     getHeaderHeight: () => 42,
     showRowNumber: true,
     rowNumberWidth: 50,
+    clearSelection: () => {
+      sheet?.clearSelection();
+    },
   });
   columnReorder.mount(demoContainer.value);
 

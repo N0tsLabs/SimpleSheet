@@ -621,6 +621,11 @@ export class Renderer {
       cell.dataset.col = String(index);
       cell.textContent = col.title || columnIndexToLetter(index);
       cell.title = col.title || columnIndexToLetter(index);
+
+      // 添加可排序指示器（如果列可排序）
+      if (col.sortable !== false) {
+        cell.classList.add('ss-sortable');
+      }
       
       const cellStyles: Record<string, string> = {
         width: `${col.width ?? 100}px`,
@@ -1717,23 +1722,30 @@ export class Renderer {
    * 更新表头排序指示器
    */
   updateSortIndicator(colIndex: number, direction: 'asc' | 'desc' | null): void {
-    // 清除旧的排序样式
-    if (this.sortColumnIndex !== null && this.sortColumnIndex !== colIndex) {
-      const oldHeaderCell = this.headerRow?.querySelector(`[data-col="${this.sortColumnIndex}"]`) as HTMLElement;
+    // 获取旧排序列的引用
+    let oldHeaderCell: HTMLElement | null = null;
+    if (this.sortColumnIndex !== null) {
+      oldHeaderCell = this.headerRow?.querySelector(`[data-col="${this.sortColumnIndex}"]`) as HTMLElement;
       if (oldHeaderCell) {
+        // 清除旧的排序样式
         oldHeaderCell.classList.remove('ss-sort-asc', 'ss-sort-desc');
+        // 恢复可排序指示器（如果该列仍然可排序）
+        oldHeaderCell.classList.add('ss-sortable');
       }
     }
 
-    // 清除当前列的旧样式
+    // 处理当前列
     const headerCell = this.headerRow?.querySelector(`[data-col="${colIndex}"]`) as HTMLElement;
     if (headerCell) {
       // 清除所有排序相关的样式
-      headerCell.classList.remove('ss-sort-asc', 'ss-sort-desc');
+      headerCell.classList.remove('ss-sort-asc', 'ss-sort-desc', 'ss-sortable');
 
       if (direction) {
         // 添加新的排序样式（CSS 使用 ::before 显示箭头）
         headerCell.classList.add(`ss-sort-${direction}`);
+      } else {
+        // 恢复可排序指示器
+        headerCell.classList.add('ss-sortable');
       }
     }
 
@@ -1750,6 +1762,8 @@ export class Renderer {
       const headerCell = this.headerRow?.querySelector(`[data-col="${this.sortColumnIndex}"]`) as HTMLElement;
       if (headerCell) {
         headerCell.classList.remove('ss-sort-asc', 'ss-sort-desc');
+        // 恢复可排序指示器
+        headerCell.classList.add('ss-sortable');
       }
     }
     this.sortColumnIndex = null;

@@ -476,6 +476,9 @@ maxLines?: number;
 interface Column {
   /** 下拉选项（type 为 select 时使用） */
   options?: SelectOption[];
+
+  /** 是否支持多选（type 为 select 时使用，默认 false） */
+  multiple?: boolean;
 }
 
 interface SelectOption {
@@ -488,6 +491,316 @@ interface SelectOption {
   /** 文字颜色（可选，默认根据背景色自动计算） */
   textColor?: string;
 }
+```
+
+### 下拉多选示例
+
+```typescript
+const columns: Column[] = [
+  // 单选下拉列
+  {
+    key: 'status',
+    title: '状态',
+    width: 120,
+    type: 'select',
+    multiple: false,  // 单选模式
+    options: [
+      { label: '启用', value: 'active', color: '#dcfce7', textColor: '#15803d' },
+      { label: '禁用', value: 'disabled', color: '#fee2e2', textColor: '#b91c1c' },
+      { label: '待定', value: 'pending', color: '#fef3c7', textColor: '#b45309' },
+    ],
+  },
+
+  // 多选下拉列
+  {
+    key: 'tags',
+    title: '标签',
+    width: 180,
+    type: 'select',
+    multiple: true,  // 开启多选模式
+    options: [
+      { label: '重要', value: 'important', color: '#fee2e2', textColor: '#b91c1c' },
+      { label: '紧急', value: 'urgent', color: '#fef3c7', textColor: '#b45309' },
+      { label: '完成', value: 'done', color: '#dcfce7', textColor: '#15803d' },
+      { label: '进行中', value: 'in_progress', color: '#dbeafe', textColor: '#1565c0' },
+    ],
+  },
+];
+```
+
+### 自定义悬浮窗配置 (expandPopover)
+
+通过 `expandPopover` 配置，可以自定义点击单元格时显示的悬浮窗内容。支持多种内容类型：纯文本、HTML、链接、邮箱、电话、标签列表等。
+
+```typescript
+interface Column {
+  /** 自定义悬浮窗配置（点击单元格时显示） */
+  expandPopover?: ExpandPopoverConfig;
+}
+
+/** 悬浮窗内容类型 */
+type PopoverContentType =
+  | 'text'        // 纯文本
+  | 'html'         // HTML 内容
+  | 'link'         // 链接（显示地址 + 复制/打开按钮）
+  | 'email'        // 邮箱（显示地址 + 复制/发送邮件按钮）
+  | 'phone'        // 电话（显示号码 + 复制/拨打按钮）
+  | 'tags'         // 标签列表
+  | 'custom';      // 自定义内容
+
+/** 悬浮窗配置 */
+interface ExpandPopoverConfig {
+  /** 悬浮窗类型（必填） */
+  type: PopoverContentType;
+
+  /** ===== 通用配置 ===== */
+  /** 悬浮窗宽度 */
+  width?: number;
+  /** 最大宽度（默认 300） */
+  maxWidth?: number;
+  /** 悬浮窗标题 */
+  title?: string;
+  /** 是否显示关闭按钮（默认 false） */
+  showClose?: boolean;
+
+  /** ===== 文本/HTML 内容配置 ===== */
+  /** 当 type 为 text/html 时使用，直接显示此内容 */
+  content?: string;
+
+  /** ===== 链接/邮箱/电话配置 ===== */
+  /** 值字段（从 rowData 中获取，默认为 'value'） */
+  valueField?: string;
+  /** 显示文本字段（可选，默认使用值字段的值） */
+  displayField?: string;
+
+  /** ===== 标签配置 ===== */
+  /** 标签值字段（从 rowData 中获取，支持数组或逗号分隔字符串，默认为 'tags'） */
+  tagsField?: string;
+  /** 标签选项配置（用于 tags 类型显示） */
+  tagOptions?: Array<{
+    value: any;
+    label: string;
+    color?: string;
+    textColor?: string;
+  }>;
+  /** 是否支持多选（用于 tags 类型，默认 false） */
+  multiple?: boolean;
+  /** 值变化回调（用于 tags 类型的可选择模式） */
+  onChange?: (value: any) => void;
+
+  /** ===== 自定义内容配置 ===== */
+  /** 自定义渲染函数（用于 custom 类型） */
+  render?: (value: any, rowData: RowData) => HTMLElement | string;
+
+  /** ===== 操作按钮配置 ===== */
+  /** 额外操作按钮 */
+  actions?: PopoverAction[];
+
+  /** ===== 行为配置 ===== */
+  /** 点击悬浮窗外部是否自动关闭（默认 true） */
+  closeOnBlur?: boolean;
+  /** 双击悬浮窗是否进入编辑模式（默认 false） */
+  dblClickToEdit?: boolean;
+}
+
+/** 悬浮窗操作按钮配置 */
+interface PopoverAction {
+  /** 按钮标签 */
+  label: string;
+  /** 按钮图标（SVG 或 emoji） */
+  icon?: string;
+  /** 是否为主要按钮样式 */
+  primary?: boolean;
+  /** 点击事件（value: 当前值，close: 关闭悬浮窗的函数） */
+  action: (value: any, close: () => void) => void;
+}
+```
+
+### 自定义悬浮窗使用示例
+
+```typescript
+const columns: Column[] = [
+  // 1. 纯文本悬浮窗（用于长文本预览）
+  {
+    key: 'description',
+    title: '描述',
+    width: 200,
+    type: 'text',
+    wrapText: 'ellipsis',  // 溢出省略，点击弹出完整内容
+    expandPopover: {
+      type: 'text',
+      maxWidth: 400,
+    },
+  },
+
+  // 2. 链接悬浮窗（支持复制、打开链接）
+  {
+    key: 'website',
+    title: '网站',
+    width: 150,
+    type: 'link',
+    expandPopover: {
+      type: 'link',
+      valueField: 'website',  // 从 rowData 中获取链接值
+      displayField: 'websiteTitle',  // 显示的文本
+      actions: [
+        {
+          label: '新窗口打开',
+          primary: true,
+          icon: '↗️',
+          action: (value) => {
+            window.open(value, '_blank');
+          },
+        },
+      ],
+    },
+  },
+
+  // 3. 邮箱悬浮窗（支持复制、发送邮件）
+  {
+    key: 'email',
+    title: '邮箱',
+    width: 180,
+    type: 'email',
+    expandPopover: {
+      type: 'email',
+      valueField: 'email',
+    },
+  },
+
+  // 4. 电话悬浮窗（支持复制、拨打电话）
+  {
+    key: 'phone',
+    title: '电话',
+    width: 120,
+    type: 'phone',
+    expandPopover: {
+      type: 'phone',
+      valueField: 'phone',
+    },
+  },
+
+  // 5. 标签悬浮窗（只读显示模式）
+  {
+    key: 'tags',
+    title: '标签',
+    width: 180,
+    type: 'select',
+    multiple: true,
+    expandPopover: {
+      type: 'tags',
+      tagsField: 'tags',
+      tagOptions: [
+        { value: 'important', label: '重要', color: '#fee2e2', textColor: '#b91c1c' },
+        { value: 'urgent', label: '紧急', color: '#fef3c7', textColor: '#b45309' },
+        { value: 'done', label: '完成', color: '#dcfce7', textColor: '#15803d' },
+      ],
+    },
+  },
+
+  // 6. 标签悬浮窗（可选择模式，支持修改）
+  {
+    key: 'status',
+    title: '状态',
+    width: 120,
+    type: 'select',
+    expandPopover: {
+      type: 'tags',
+      tagsField: 'status',
+      tagOptions: [
+        { value: 'active', label: '启用', color: '#dcfce7', textColor: '#15803d' },
+        { value: 'disabled', label: '禁用', color: '#fee2e2', textColor: '#b91c1c' },
+        { value: 'pending', label: '待定', color: '#fef3c7', textColor: '#b45309' },
+      ],
+      multiple: false,  // 单选模式
+      onChange: (value) => {
+        // 更新数据
+        sheet.setCellValue(row, col, value);
+        // 刷新单元格
+        sheet.refreshCell(row, col);
+      },
+    },
+  },
+
+  // 7. 自定义悬浮窗（渲染函数）
+  {
+    key: 'user',
+    title: '用户',
+    width: 120,
+    expandPopover: {
+      type: 'custom',
+      maxWidth: 350,
+      render: (value, rowData) => {
+        // 自定义渲染内容
+        return `
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <img src="${rowData.avatar}" style="width: 48px; height: 48px; border-radius: 50%;">
+            <div>
+              <div style="font-weight: 600; font-size: 14px;">${rowData.name}</div>
+              <div style="color: #666; font-size: 12px;">${rowData.email}</div>
+              <div style="color: #999; font-size: 11px;">ID: ${rowData.id}</div>
+            </div>
+          </div>
+        `;
+      },
+      actions: [
+        {
+          label: '查看详情',
+          primary: true,
+          icon: '👤',
+          action: () => {
+            console.log('查看用户详情:', rowData);
+          },
+        },
+      ],
+    },
+  },
+];
+
+// 数据示例
+const data = [
+  {
+    id: 1,
+    name: '张三',
+    description: '这是一个很长的描述文本，包含大量内容，需要通过悬浮窗来完整展示。',
+    website: 'https://example.com',
+    websiteTitle: '访问官网',
+    email: 'zhangsan@example.com',
+    phone: '13800138000',
+    tags: ['important', 'urgent'],
+    status: 'active',
+    avatar: 'https://example.com/avatar1.png',
+  },
+];
+```
+
+### 悬浮窗 API
+
+```typescript
+import { showPopover, hidePopover } from '@n0ts123/simple-sheet';
+
+// 手动显示悬浮窗
+showPopover(
+  cell,  // 触发悬浮窗的单元格元素
+  value, // 当前值
+  rowData, // 行数据
+  {
+    type: 'text',
+    content: '悬浮窗内容',
+    maxWidth: 300,
+  }
+);
+
+// 手动关闭悬浮窗
+hidePopover();
+
+// 设置双击悬浮窗的回调
+import { setPopoverDblClickHandler } from '@n0ts123/simple-sheet';
+
+setPopoverDblClickHandler((cell) => {
+  // 双击悬浮窗时触发，进入编辑模式
+  sheet.startEditing(row, col);
+});
 ```
 
 ### 自定义渲染器和编辑器

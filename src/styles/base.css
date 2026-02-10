@@ -81,6 +81,17 @@
   color: var(--ss-primary-color);
 }
 
+/* 可排序列的初始状态指示器 */
+.ss-header-cell.ss-sortable::before {
+  content: '⇅';
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 8px;
+  color: var(--ss-text-color-light);
+}
+
 /* 排序状态指示器 */
 .ss-header-cell.ss-sort-asc::before {
   content: '▲';

@@ -37,6 +37,10 @@ export type {
   FileUploadResult,
   SortEvent,
   SortCustomEvent,
+  // 悬浮窗相关类型
+  ExpandPopoverConfig,
+  PopoverAction,
+  PopoverContentType,
 } from './types';
 
 // 导出右键菜单插件
@@ -118,6 +122,8 @@ export type { FreezePaneConfig } from './plugins/FreezePane';
 
 export { ConditionalFormat, ConditionalFormatRules } from './plugins/ConditionalFormat';
 export type { ConditionalFormatRule, ConditionalFormatType, FormatStyle } from './plugins/ConditionalFormat';
+
+export { showPopover, hidePopover } from './plugins/CustomPopover';
 
 // 导出工具函数
 export {

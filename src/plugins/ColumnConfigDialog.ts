@@ -57,6 +57,7 @@ export class ColumnConfigDialog {
   private columnName: string = '';
   private columnType: ColumnType = 'text';
   private selectOptions: SelectOption[] = [];
+  private selectMultiple: boolean = false; // 是否支持多选
   private decimalPlaces: number = 2;
   private numberPrefix: string = '';
   private numberSuffix: string = '';
@@ -76,6 +77,7 @@ export class ColumnConfigDialog {
       this.columnName = options.initialColumn.title || '';
       this.columnType = options.initialColumn.type || 'text';
       this.selectOptions = [...(options.initialColumn.options || [])];
+      this.selectMultiple = options.initialColumn.multiple ?? false;
       this.decimalPlaces = options.initialColumn.decimalPlaces ?? 2;
       this.numberPrefix = options.initialColumn.numberPrefix || '';
       this.numberSuffix = options.initialColumn.numberSuffix || '';
@@ -307,7 +309,24 @@ export class ColumnConfigDialog {
       hint.textContent = '暂无选项，点击上方按钮添加';
       this.optionsListEl.appendChild(hint);
     }
-    
+
+    // 多选配置
+    const multipleGroup = createElement('div', 'ss-ccd-form-group ss-ccd-checkbox-group');
+    const multipleCheckbox = createElement('input', 'ss-ccd-checkbox') as HTMLInputElement;
+    multipleCheckbox.type = 'checkbox';
+    multipleCheckbox.id = 'ss-ccd-select-multiple';
+    multipleCheckbox.checked = this.selectMultiple;
+    multipleCheckbox.addEventListener('change', (e) => {
+      this.selectMultiple = (e.target as HTMLInputElement).checked;
+    });
+    multipleGroup.appendChild(multipleCheckbox);
+
+    const multipleLabel = createElement('label', 'ss-ccd-checkbox-label') as HTMLLabelElement;
+    multipleLabel.htmlFor = 'ss-ccd-select-multiple';
+    multipleLabel.textContent = '支持多选（可选择多个标签）';
+    multipleGroup.appendChild(multipleLabel);
+    container.appendChild(multipleGroup);
+
     return container;
   }
 
@@ -726,6 +745,7 @@ export class ColumnConfigDialog {
     switch (this.columnType) {
       case 'select':
         column.options = this.selectOptions.filter(opt => opt.label.trim());
+        column.multiple = this.selectMultiple;
         break;
       case 'number':
         column.decimalPlaces = this.decimalPlaces;
