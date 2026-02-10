@@ -495,6 +495,55 @@ const initSheet = async () => {
   sheet.on('row:insert', (e) => log(`插入行: ${e.index + 1}`));
   sheet.on('row:delete', (e) => log(`删除行: ${e.index + 1}`));
 
+  // 配置变更事件
+  sheet.on('config:change', (e) => {
+    const typeLabels: Record<string, string> = {
+      'sort': '排序',
+      'column-resize': '列宽调整',
+      'column-reorder': '列顺序调整',
+      'column-insert': '插入列',
+      'column-delete': '删除列',
+      'row-reorder': '行顺序调整',
+      'row-insert': '插入行',
+      'row-delete': '删除行',
+      'freeze': '冻结设置',
+      'merge': '合并单元格',
+      'filter': '筛选',
+      'load': '加载配置',
+    };
+    const label = typeLabels[e.type] || e.type;
+    const date = new Date(e.timestamp).toLocaleTimeString();
+
+    // 构建详细日志
+    let detail = '';
+    switch (e.type) {
+      case 'sort':
+        const col = e.detail.column;
+        const colName = columns.value[col]?.title || `列${col + 1}`;
+        const direction = e.detail.direction === 'asc' ? '升序' : (e.detail.direction === 'desc' ? '降序' : '取消');
+        detail = `列: ${colName}, 方式: ${direction}`;
+        break;
+      case 'column-resize':
+        const resizeCol = e.detail.column;
+        const resizeColName = columns.value[resizeCol]?.title || `列${resizeCol + 1}`;
+        detail = `列: ${resizeColName}, ${e.detail.oldWidth}px → ${e.detail.newWidth}px`;
+        break;
+      case 'column-reorder':
+        detail = `${e.detail.fromIndex + 1} → ${e.detail.toIndex + 1}`;
+        break;
+      case 'row-reorder':
+        detail = `行: ${e.detail.fromIndex + 1} → ${e.detail.toIndex + 1}`;
+        break;
+    }
+
+    log(`📋 配置变更 [${label}] ${detail ? '- ' + detail : ''}`);
+    log(`   快照时间: ${date}`);
+    log(`   列数: ${e.snapshot.columns.length}`);
+
+    // 输出完整快照到控制台
+    console.log('=== 配置快照 ===', e);
+  });
+
   log('全功能表格初始化完成');
   log('✅ 已启用: 编辑、选区、右键菜单、拖拽排序、排序、筛选、搜索、验证、撤销重做、复制粘贴');
 };

@@ -50,13 +50,23 @@
 
 /* 只读单元格 */
 .ss-cell-readonly {
-  background-color: #f5f5f5; /* 使用更明显的灰色背景 */
+  background-color: var(--ss-readonly-bg, #f5f5f5);
   color: var(--ss-text-color-secondary);
-  cursor: not-allowed; /* 禁止编辑的鼠标样式 */
+  cursor: not-allowed;
 }
 
 .ss-cell-readonly:hover {
-  background-color: #e8e8e8; /* hover 时稍微深一点的灰色 */
+  background-color: var(--ss-readonly-bg-hover, #e8e8e8);
+}
+
+/* 暗色主题只读单元格 */
+[data-theme="dark"] .ss-cell-readonly {
+  background-color: var(--ss-readonly-bg, #374151);
+  color: var(--ss-text-color-secondary);
+}
+
+[data-theme="dark"] .ss-cell-readonly:hover {
+  background-color: var(--ss-readonly-bg-hover, #4b5563);
 }
 
 /* 错误状态单元格 */

@@ -619,13 +619,26 @@ export class Renderer {
       
       const cell = createElement('div', 'ss-header-cell');
       cell.dataset.col = String(index);
-      cell.textContent = col.title || columnIndexToLetter(index);
-      cell.title = col.title || columnIndexToLetter(index);
+
+      // 创建标题容器
+      const titleContainer = createElement('div', 'ss-header-title');
+      titleContainer.textContent = col.title || columnIndexToLetter(index);
+      cell.appendChild(titleContainer);
 
       // 添加可排序指示器（如果列可排序）
       if (col.sortable !== false) {
         cell.classList.add('ss-sortable');
+
+        // 添加排序图标（独立的点击区域）
+        const sortIcon = createElement('div', 'ss-sort-icon');
+        sortIcon.textContent = '⇅';  // 默认显示双向箭头
+        sortIcon.dataset.col = String(index);
+        sortIcon.title = '点击排序';
+        cell.appendChild(sortIcon);
       }
+
+      // 设置 title 属性（显示完整列名）
+      cell.title = col.title || columnIndexToLetter(index);
       
       const cellStyles: Record<string, string> = {
         width: `${col.width ?? 100}px`,
@@ -1723,29 +1736,35 @@ export class Renderer {
    */
   updateSortIndicator(colIndex: number, direction: 'asc' | 'desc' | null): void {
     // 获取旧排序列的引用
-    let oldHeaderCell: HTMLElement | null = null;
+    let oldSortIcon: HTMLElement | null = null;
     if (this.sortColumnIndex !== null) {
-      oldHeaderCell = this.headerRow?.querySelector(`[data-col="${this.sortColumnIndex}"]`) as HTMLElement;
-      if (oldHeaderCell) {
-        // 清除旧的排序样式
-        oldHeaderCell.classList.remove('ss-sort-asc', 'ss-sort-desc');
-        // 恢复可排序指示器（如果该列仍然可排序）
-        oldHeaderCell.classList.add('ss-sortable');
+      const oldHeaderCell = this.headerRow?.querySelector(`[data-col="${this.sortColumnIndex}"]`) as HTMLElement;
+      oldSortIcon = oldHeaderCell?.querySelector('.ss-sort-icon') ?? null;
+      if (oldSortIcon) {
+        // 清除旧的排序图标内容
+        oldSortIcon.textContent = '';
+        oldSortIcon.classList.remove('ss-sort-icon-asc', 'ss-sort-icon-desc');
       }
     }
 
     // 处理当前列
     const headerCell = this.headerRow?.querySelector(`[data-col="${colIndex}"]`) as HTMLElement;
     if (headerCell) {
-      // 清除所有排序相关的样式
-      headerCell.classList.remove('ss-sort-asc', 'ss-sort-desc', 'ss-sortable');
-
-      if (direction) {
-        // 添加新的排序样式（CSS 使用 ::before 显示箭头）
-        headerCell.classList.add(`ss-sort-${direction}`);
-      } else {
-        // 恢复可排序指示器
-        headerCell.classList.add('ss-sortable');
+      const sortIcon = headerCell.querySelector('.ss-sort-icon') as HTMLElement | null;
+      if (sortIcon) {
+        if (direction === 'asc') {
+          sortIcon.textContent = '▲';
+          sortIcon.classList.add('ss-sort-icon-asc');
+          sortIcon.classList.remove('ss-sort-icon-desc');
+        } else if (direction === 'desc') {
+          sortIcon.textContent = '▼';
+          sortIcon.classList.add('ss-sort-icon-desc');
+          sortIcon.classList.remove('ss-sort-icon-asc');
+        } else {
+          // 取消排序，恢复默认状态
+          sortIcon.textContent = '⇅';
+          sortIcon.classList.remove('ss-sort-icon-asc', 'ss-sort-icon-desc');
+        }
       }
     }
 
@@ -1761,9 +1780,11 @@ export class Renderer {
     if (this.sortColumnIndex !== null) {
       const headerCell = this.headerRow?.querySelector(`[data-col="${this.sortColumnIndex}"]`) as HTMLElement;
       if (headerCell) {
-        headerCell.classList.remove('ss-sort-asc', 'ss-sort-desc');
-        // 恢复可排序指示器
-        headerCell.classList.add('ss-sortable');
+        const sortIcon = headerCell.querySelector('.ss-sort-icon') as HTMLElement | null;
+        if (sortIcon) {
+          sortIcon.textContent = '⇅';
+          sortIcon.classList.remove('ss-sort-icon-asc', 'ss-sort-icon-desc');
+        }
       }
     }
     this.sortColumnIndex = null;

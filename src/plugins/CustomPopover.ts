@@ -131,11 +131,18 @@ export function showPopover(
     maxWidth: `${maxWidth}px`,
   });
 
-  // 继承主题
+  // 继承主题 - 从多个来源获取，sheetRoot 最先因为主题实际设置在那里
   const sheetRoot = cell.closest('.ss-root');
-  const theme = sheetRoot?.getAttribute('data-theme');
+  const theme = sheetRoot?.getAttribute('data-theme') ||
+                 document.documentElement.getAttribute('data-theme') ||
+                 document.body.getAttribute('data-theme');
   if (theme) {
     popover.setAttribute('data-theme', theme);
+    // 直接设置暗色主题的样式，确保 CSS 选择器不生效时也能正确显示
+    if (theme === 'dark') {
+      popover.style.background = '#2a2a3e';
+      popover.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1)';
+    }
   }
 
   // 标题栏

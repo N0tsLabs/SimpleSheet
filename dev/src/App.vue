@@ -1,24 +1,23 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import HomePage from './components/HomePage.vue';
-import TestPage from './components/TestPage.vue';
+import DocsPage from './components/DocsPage.vue';
 
-const currentPage = ref<'home' | 'test'>('home');
+// 简单路由
+const currentPage = ref<'home' | 'docs'>('home');
+
+const goDocs = () => {
+  currentPage.value = 'docs';
+};
+
+const goHome = () => {
+  currentPage.value = 'home';
+};
 </script>
 
 <template>
-  <!-- 页面切换按钮 -->
-  <div class="page-switcher">
-    <button :class="{ active: currentPage === 'home' }" @click="currentPage = 'home'">
-      🏠 首页
-    </button>
-    <button :class="{ active: currentPage === 'test' }" @click="currentPage = 'test'">
-      🧪 测试
-    </button>
-  </div>
-
-  <HomePage v-if="currentPage === 'home'" />
-  <TestPage v-else />
+  <HomePage v-if="currentPage === 'home'" @go-docs="goDocs" />
+  <DocsPage v-else @go-home="goHome" />
 </template>
 
 <style>
@@ -55,43 +54,5 @@ body {
 
 #app {
   min-height: 100vh;
-}
-
-.page-switcher {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  z-index: 9999;
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  background: rgba(15, 23, 42, 0.95);
-  border-radius: 12px;
-  backdrop-filter: blur(8px);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-}
-
-.page-switcher button {
-  padding: 10px 16px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: rgba(255,255,255,0.6);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.page-switcher button:hover {
-  color: white;
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.page-switcher button.active {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  color: white;
-  box-shadow: 0 2px 10px rgba(59, 130, 246, 0.4);
 }
 </style>

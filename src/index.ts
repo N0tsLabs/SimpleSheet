@@ -41,6 +41,10 @@ export type {
   ExpandPopoverConfig,
   PopoverAction,
   PopoverContentType,
+  // 配置变更相关类型
+  ConfigChangeType,
+  SheetConfigSnapshot,
+  SheetConfigChangeEvent,
 } from './types';
 
 // 导出右键菜单插件

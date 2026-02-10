@@ -24,8 +24,11 @@ import type {
     CellMeta,
     Theme,
     CellPosition,
-    SelectionRange
+    SelectionRange,
+    SheetConfigSnapshot,
+    ConfigChangeType
 } from "../types";
+import { ColumnReorder } from "../plugins/ColumnReorder";
 import { addEvent, addEvents, getMousePosition } from "../utils/dom";
 import { normalizeRange } from "../utils/helpers";
 import { createElement, setStyles } from "../utils/dom";
@@ -74,6 +77,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     private renderer: Renderer;
     private autoFill: AutoFill;
     private rowReorder: RowReorder;
+    private columnReorder: ColumnReorder;
     private filePasteHandler: FilePasteHandler;
     private columnResizer: ColumnResizer;
 
@@ -176,6 +180,21 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             rowNumberWidth: this.options.rowNumberWidth,
             getScrollTop: () => this.renderer.getVirtualScroll().getScrollTop(),
             getRowOffset: (rowIndex) => this.renderer.getRowOffset(rowIndex) // 支持自适应行高
+        });
+
+        // 初始化列拖拽排序插件
+        this.columnReorder = new ColumnReorder({
+            getColumns: () => this.options.columns,
+            setColumns: (columns) => {
+                this.options.columns = columns;
+                this.renderer.updateOptions({ columns: this.options.columns });
+                this.renderer.render();
+            },
+            getColumnWidth: (index) => this.options.columns[index]?.width ?? 100,
+            getHeaderHeight: () => this.options.headerHeight,
+            showRowNumber: this.options.showRowNumber,
+            rowNumberWidth: this.options.rowNumberWidth,
+            clearSelection: () => this.clearSelection()
         });
 
         // 初始化文件粘贴处理器
@@ -294,6 +313,20 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             this.filePasteHandler.mount(root);
         }
 
+        // 挂载列拖拽排序插件
+        if (root) {
+            this.columnReorder.mount(root);
+        }
+
+        // 处理列拖拽排序事件
+        this.columnReorder.on('reorder:end', ({ fromIndex, toIndex }) => {
+            // 触发配置变更事件
+            this.emitConfigChange('column-reorder', {
+                fromIndex,
+                toIndex
+            });
+        });
+
         // 挂载列宽调整插件
         if (root) {
             this.columnResizer.mount(root);
@@ -306,6 +339,12 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                 oldWidth,
                 newWidth,
                 column: this.options.columns[columnIndex]
+            });
+            // 触发配置变更事件
+            this.emitConfigChange('column-resize', {
+                column: columnIndex,
+                oldWidth,
+                newWidth
             });
         });
 
@@ -529,6 +568,11 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         // 行拖拽排序事件
         this.rowReorder.on("reorder:end", ({ fromIndex, toIndex }) => {
             this.emit("row:reorder" as any, { fromIndex, toIndex });
+            // 触发配置变更事件
+            this.emitConfigChange('row-reorder', {
+                fromIndex,
+                toIndex
+            });
             this.renderer.render();
         });
 
@@ -638,8 +682,9 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             if (colIndex >= 0) {
                 const column = this.options.columns[colIndex];
 
-                // 检查是否可以排序
-                if (column?.sortable !== false && !e.shiftKey && !e.ctrlKey) {
+                // 检查是否点击了排序图标（只有点击图标才触发排序）
+                const sortIcon = target.closest(".ss-sort-icon");
+                if (sortIcon && column?.sortable !== false && !e.shiftKey && !e.ctrlKey) {
                     // 记录拖拽起始位置
                     this.headerDragState = {
                         isDragging: false,
@@ -664,7 +709,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                     return;
                 }
 
-                // 其他情况：选中整列
+                // 点击其他区域：选中整列（方便拖拽排序）
                 const maxRow = this.dataModel.getRowCount() - 1;
                 if (e.shiftKey && this.options.allowMultiSelect) {
                     const activeCell = this.selectionManager.getActiveCell();
@@ -1694,6 +1739,11 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                 direction: null,
                 data: this.dataModel.getData()
             });
+            // 触发配置变更事件
+            this.emitConfigChange('sort', {
+                column: colIndex,
+                direction: null
+            });
             this.renderer.updateSortIndicator(colIndex, null);
             return;
         }
@@ -1774,6 +1824,12 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             data: this.dataModel.getData()
         });
 
+        // 触发配置变更事件
+        this.emitConfigChange('sort', {
+            column: colIndex,
+            direction
+        });
+
         // 更新表头排序指示器
         this.renderer.updateSortIndicator(colIndex, direction);
     }
@@ -1786,6 +1842,47 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             column: this.sortColumn,
             direction: this.sortDirection
         };
+    }
+
+    /**
+     * 获取表格配置快照
+     * 用于保存用户的表格配置（列顺序、宽度、排序等）
+     */
+    getConfigSnapshot(): SheetConfigSnapshot {
+        // 构建列配置快照（包含 key, width, title 等）
+        const columnsSnapshot = this.options.columns.map(col => ({
+            key: col.key,
+            title: col.title,
+            width: col.width,
+            type: col.type,
+            // 只保留必要的配置属性
+        }));
+
+        // 构建排序状态快照
+        const sortSnapshot = this.sortColumn !== null ? {
+            column: this.sortColumn,
+            direction: this.sortDirection
+        } : undefined;
+
+        return {
+            columns: columnsSnapshot as Column[],
+            sort: sortSnapshot,
+        };
+    }
+
+    /**
+     * 触发配置变更事件
+     */
+    private emitConfigChange(
+        type: ConfigChangeType,
+        detail: Record<string, any> = {}
+    ): void {
+        this.emit('config:change' as any, {
+            type,
+            detail,
+            snapshot: this.getConfigSnapshot(),
+            timestamp: Date.now(),
+        });
     }
 
     /**
@@ -2313,6 +2410,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         this.editorManager.destroy();
         this.autoFill.unmount();
         this.rowReorder.unmount();
+        this.columnReorder.unmount();
         this.filePasteHandler.unmount();
         this.columnResizer.unmount();
         this.renderer.destroy();
@@ -2323,6 +2421,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         this.historyManager.removeAllListeners();
         this.autoFill.removeAllListeners();
         this.rowReorder.removeAllListeners();
+        this.columnReorder.removeAllListeners();
         this.filePasteHandler.removeAllListeners();
         this.columnResizer.removeAllListeners();
         this.removeAllListeners();

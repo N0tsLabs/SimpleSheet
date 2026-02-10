@@ -495,6 +495,73 @@ export interface SheetEventMap {
   // 排序事件
   'sort:change': SortEvent;
   'sort:custom': SortCustomEvent;
+
+  // 配置变更事件
+  'config:change': SheetConfigChangeEvent;
+}
+
+/**
+ * 配置变更类型
+ */
+export type ConfigChangeType =
+  | 'sort'           // 排序变更
+  | 'column-resize'  // 列宽调整
+  | 'column-reorder' // 列顺序调整
+  | 'column-insert'  // 列插入
+  | 'column-delete'  // 列删除
+  | 'row-reorder'    // 行顺序调整
+  | 'row-insert'     // 行插入
+  | 'row-delete'     // 行删除
+  | 'freeze'         // 冻结设置变更
+  | 'merge'          // 合并单元格
+  | 'filter'         // 筛选变更
+  | 'load';          // 初始加载
+
+/**
+ * 表格配置快照
+ */
+export interface SheetConfigSnapshot {
+  /** 列配置列表（包含 width、key 等） */
+  columns: Column[];
+  /** 排序状态（column 为索引，direction 为方向） */
+  sort?: {
+    column: number;
+    direction: 'asc' | 'desc' | null;
+  };
+  /** 冻结设置（row 为冻结行数，col 为冻结列数） */
+  freeze?: {
+    row?: number;
+    col?: number;
+  };
+  /** 合并单元格信息 */
+  merges?: MergeInfo[];
+  /** 筛选条件 */
+  filter?: FilterCondition[];
+  /** 行顺序映射（当前索引 -> 原始索引） */
+  rowOrder?: number[];
+}
+
+/**
+ * 表格配置变更事件
+ */
+export interface SheetConfigChangeEvent {
+  /** 变更类型 */
+  type: ConfigChangeType;
+  /** 变更详情 */
+  detail: {
+    column?: number;       // 列索引
+    oldWidth?: number;     // 旧宽度
+    newWidth?: number;     // 新宽度
+    fromIndex?: number;    // 源位置
+    toIndex?: number;      // 目标位置
+    columnConfig?: Column;  // 列配置
+    mergeInfo?: MergeInfo;  // 合并信息
+    [key: string]: any;
+  };
+  /** 完整的配置快照 */
+  snapshot: SheetConfigSnapshot;
+  /** 变更时间戳 */
+  timestamp: number;
 }
 
 /**
@@ -716,5 +783,37 @@ export interface ExpandPopoverConfig {
   closeOnBlur?: boolean;
   /** 双击悬浮窗是否进入编辑模式（默认 false） */
   dblClickToEdit?: boolean;
+}
+
+// ============================================
+// 从插件中重新导出的类型
+// ============================================
+
+/**
+ * 筛选条件（从 Filter 插件重新导出）
+ */
+export interface FilterCondition {
+  /** 列索引或 key */
+  column: number | string;
+  /** 操作符 */
+  operator: string;
+  /** 筛选值 */
+  value?: any;
+  /** 第二个值（用于 between） */
+  value2?: any;
+}
+
+/**
+ * 合并单元格信息（从 MergeCell 插件重新导出）
+ */
+export interface MergeInfo {
+  /** 起始行 */
+  startRow: number;
+  /** 起始列 */
+  startCol: number;
+  /** 行跨度 */
+  rowspan: number;
+  /** 列跨度 */
+  colspan: number;
 }
 

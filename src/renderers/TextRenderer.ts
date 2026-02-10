@@ -257,14 +257,22 @@ export function showExpandOverlay(cell: HTMLElement, text: string): void {
   
   // 创建悬浮窗（类似文件附件预览）
   expandOverlay = createElement('div', 'ss-cell-expand-overlay');
-  
-  // 继承表格的主题设置
+
+  // 继承表格的主题设置 - sheetRoot 最先因为主题实际设置在那里
   const sheetRoot = cell.closest('.ss-root');
-  const theme = sheetRoot?.getAttribute('data-theme');
+  const theme = sheetRoot?.getAttribute('data-theme') ||
+                 document.documentElement.getAttribute('data-theme') ||
+                 document.body.getAttribute('data-theme');
   if (theme) {
     expandOverlay.setAttribute('data-theme', theme);
+    // 直接设置暗色主题的样式，确保 CSS 选择器不生效时也能正确显示
+    if (theme === 'dark') {
+      expandOverlay.style.background = '#1f2937';
+      expandOverlay.style.borderColor = '#60a5fa';
+      expandOverlay.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.4)';
+    }
   }
-  
+
   // 内容区域（去掉标题，直接显示内容）
   const content = createElement('div', 'ss-expand-overlay-content');
   content.textContent = text;
