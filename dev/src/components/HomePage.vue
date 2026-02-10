@@ -422,7 +422,18 @@ const initSheet = async () => {
   validator.addRule('performance', ValidationRules.range(0, 5));
 
   // 事件监听
-  sheet.on('cell:click', () => {});
+  sheet.on('cell:click', (e) => {
+    // 点击单元格时搜索该行数据
+    const rowData = currentData[e.row];
+    if (rowData) {
+      const name = rowData.name;
+      const results = search?.search(name, { caseSensitive: false }) || [];
+      if (results.length > 0) {
+        sheet?.scrollToCell(results[0].row, results[0].col);
+        log(`🔍 查找: ${name}`);
+      }
+    }
+  });
   sheet.on('edit:end', () => {});
   sheet.on('selection:change', () => {});
   sheet.on('copy', () => log('已复制'));

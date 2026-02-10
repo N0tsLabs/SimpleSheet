@@ -20,7 +20,10 @@ md.renderer.rules.heading_open = function(tokens, idx, options, env, self) {
   const token = tokens[idx];
   const nextToken = tokens[idx + 1];
   const text = nextToken?.content || '';
-  const id = 'doc-' + text.toLowerCase().replace(/[^\w]+/g, '-');
+  // 使用 slugify 方式生成 ID，支持中文
+  const id = 'doc-' + text.toLowerCase()
+    .replace(/[^\w\u4e00-\u9fa5]+/g, '-')
+    .replace(/^-+|-+$/g, '');
   token.attrSet('id', id);
   return self.renderToken(tokens, idx, options);
 };
@@ -31,13 +34,23 @@ const docLoading = ref(false);
 const docToc = ref<{ id: string; text: string; level: number }[]>([]);
 const activeDocSection = ref('');
 
+// 检查项是否高亮
+const isActive = (id: string): boolean => {
+  return activeDocSection.value === id;
+};
+
 // TOC 项点击
 const scrollToDocSection = (id: string) => {
   activeDocSection.value = id;
-  // ID 格式是 heading-0，需要找到对应的 doc-heading-x 元素
   const el = document.getElementById(id);
   if (el) {
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const headerHeight = 70;
+    const rect = el.getBoundingClientRect();
+    const absoluteTop = window.scrollY + rect.top;
+    window.scrollTo({
+      top: absoluteTop - headerHeight,
+      behavior: 'smooth',
+    });
   }
 };
 
@@ -73,8 +86,10 @@ const extractToc = (content: string) => {
   while ((match = headingRegex.exec(content)) !== null) {
     const level = match[1].length;
     const text = match[2].trim();
-    // 生成与 markdown-it 渲染一致的 ID
-    const id = 'doc-' + text.toLowerCase().replace(/[^\w]+/g, '-');
+    // 生成与 markdown-it 渲染一致的 ID（支持中文）
+    const id = 'doc-' + text.toLowerCase()
+      .replace(/[^\w\u4e00-\u9fa5]+/g, '-')
+      .replace(/^-+|-+$/g, '');
     toc.push({ id, text, level });
   }
 
@@ -111,7 +126,7 @@ onMounted(() => {
             <li
               v-for="item in docToc"
               :key="item.id"
-              :class="['toc-item', `toc-level-${item.level}`, { active: activeDocSection === item.id }]"
+              :class="['toc-item', 'toc-level-' + item.level, { active: isActive(item.id) }]"
               @click="scrollToDocSection(item.id)"
             >
               {{ item.text }}
