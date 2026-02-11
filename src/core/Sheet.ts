@@ -30,7 +30,7 @@ import type {
 } from "../types";
 import { ColumnReorder } from "../plugins/ColumnReorder";
 import { addEvent, addEvents, getMousePosition } from "../utils/dom";
-import { normalizeRange } from "../utils/helpers";
+import { normalizeRange, deepClone } from "../utils/helpers";
 import { createElement, setStyles } from "../utils/dom";
 import { showImagePreview } from "../plugins/ImageViewer";
 import { showPopover, hidePopover, setPopoverDblClickHandler } from "../plugins/CustomPopover";
@@ -375,9 +375,55 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         );
 
         // 键盘事件
-        this.keyboardManager.on("keydown", () => {
+        this.keyboardManager.on("keydown", (e: KeyboardEvent) => {
             // 任何键盘操作都关闭悬浮窗
             hidePopover();
+
+            // Excel 风格：选中单元格后按字符键直接编辑
+            // 如果没有正在编辑，且按下的是可打印字符（排除功能键）
+            if (!this.editorManager.isEditing() && !this.options.readonly) {
+                const isPrintableChar =
+                    e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey;
+
+                if (isPrintableChar) {
+                    const activeCell = this.selectionManager.getActiveCell();
+                    if (activeCell) {
+                        const column = this.options.columns[activeCell.col];
+                        const cellMeta = this.dataModel.getCellMeta(activeCell.row, activeCell.col);
+                        const isReadonly =
+                            column?.readonly === true ||
+                            cellMeta?.readonly === true;
+
+                        if (!isReadonly) {
+                            // 开始编辑
+                            this.startEdit(activeCell.row, activeCell.col);
+
+                            // 设置编辑器值为按下的字符
+                            setTimeout(() => {
+                                const editor = this.editorManager.getActiveEditor();
+                                if (editor) {
+                                    const input =
+                                        (editor as any).input ||
+                                        (editor as any).textarea ||
+                                        (editor as any).$input;
+                                    if (input) {
+                                        input.value = e.key;
+                                        // 聚焦但不选中内容，把光标放最后面
+                                        input.focus();
+                                        // 如果有值，把光标放最后面（Excel 风格）
+                                        const len = input.value.length;
+                                        input.setSelectionRange(len, len);
+                                        // 触发 input 事件以更新编辑器状态
+                                        input.dispatchEvent(
+                                            new Event("input", { bubbles: true })
+                                        );
+                                    }
+                                }
+                            }, 0);
+                        }
+                    }
+                }
+            }
         });
         this.keyboardManager.on("navigation", this.handleNavigation.bind(this));
         this.keyboardManager.on("enter", this.handleEnter.bind(this));
@@ -1564,10 +1610,17 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     }
 
     /**
-     * 获取所有数据
+     * 获取所有数据（返回原始引用，外部修改会影响内部数据）
      */
     getData(): RowData[] {
         return this.dataModel.getData();
+    }
+
+    /**
+     * 获取所有数据的副本（深拷贝，外部修改不影响内部数据）
+     */
+    getDataCopy(): RowData[] {
+        return deepClone(this.dataModel.getData());
     }
 
     /**

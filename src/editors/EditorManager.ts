@@ -227,6 +227,13 @@ export class EditorManager extends EventEmitter<EditorEvents> {
   }
 
   /**
+   * 获取当前活动的编辑器实例
+   */
+  getActiveEditor(): CellEditor | null {
+    return this.activeEditor?.editor ?? null;
+  }
+
+  /**
    * 更新编辑器位置
    */
   updatePosition(cellRect: DOMRect, containerRect: DOMRect): void {

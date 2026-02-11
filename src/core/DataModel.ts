@@ -52,9 +52,16 @@ export class DataModel extends EventEmitter<DataModelEvents> {
   }
 
   /**
-   * 获取所有数据
+   * 获取所有数据（返回原始引用，外部修改会影响内部数据）
    */
   getData(): RowData[] {
+    return this.data;
+  }
+
+  /**
+   * 获取所有数据的副本（深拷贝，外部修改不影响内部数据）
+   */
+  getDataCopy(): RowData[] {
     return deepClone(this.data);
   }
 
