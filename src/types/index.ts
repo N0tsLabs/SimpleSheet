@@ -403,6 +403,13 @@ export interface SheetOptions {
     /** 其他操作提示 */
     [key: string]: string | undefined;
   };
+  // TODO: 冻结功能开发中
+  // freeze?: {
+  //   /** 冻结行数（从顶部，包括表头） */
+  //   rows?: number;
+  //   /** 冻结列数（从左侧，包括行号列） */
+  //   cols?: number;
+  // };
 }
 
 /**

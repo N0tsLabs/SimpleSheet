@@ -163,10 +163,10 @@
   animation: ss-copy-success 0.5s ease-out;
 }
 
-/* 平滑滚动 */
-.ss-scroll-container {
+/* 平滑滚动 - 已禁用，因为 smooth 会导致点击时意外滚动 */
+/* .ss-scroll-container {
   scroll-behavior: smooth;
-}
+} */
 
 /* 禁用动画（用户偏好减少动画） */
 @media (prefers-reduced-motion: reduce) {

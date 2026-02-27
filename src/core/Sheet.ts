@@ -29,7 +29,7 @@ import type {
     ConfigChangeType
 } from "../types";
 import { ColumnReorder } from "../plugins/ColumnReorder";
-import { addEvent, addEvents, getMousePosition } from "../utils/dom";
+import { addEvent, addEvents } from "../utils/dom";
 import { normalizeRange, deepClone } from "../utils/helpers";
 import { createElement, setStyles } from "../utils/dom";
 import { showImagePreview } from "../plugins/ImageViewer";
@@ -61,7 +61,7 @@ const DEFAULT_OPTIONS: Required<Omit<SheetOptions, "columns" | "toastMessages" |
     virtualScrollBuffer: 5,
     rowHeights: new Map<number, number>(),
     enableContextMenu: true,
-    contextMenuOptions: undefined
+    contextMenuOptions: undefined,
 };
 
 export class Sheet extends EventEmitter<SheetEventMap> {
@@ -150,7 +150,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             virtualScrollBuffer: this.options.virtualScrollBuffer,
             verticalPadding: this.options.verticalPadding,
             // 传递预计算的行高
-            rowHeights: this.options.rowHeights
+            rowHeights: this.options.rowHeights,
         });
 
         // 初始化自动填充插件
@@ -449,7 +449,10 @@ export class Sheet extends EventEmitter<SheetEventMap> {
 
         // 选区变更事件
         this.selectionManager.on("change", (event) => {
-            this.renderer.updateSelection(event.cells, this.selectionManager.getActiveCell());
+            // 延迟更新选区显示，避免在事件处理期间触发布局变化导致滚动跳跃
+            setTimeout(() => {
+                this.renderer.updateSelection(event.cells, this.selectionManager.getActiveCell());
+            }, 0);
             this.emit("selection:change", event);
 
             // 更新填充手柄位置
@@ -634,12 +637,13 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     private handleMouseDown(e: MouseEvent): void {
         if (e.button !== 0) return; // 只处理左键
 
+        const target = e.target as HTMLElement;
+
         const root = this.renderer.getRoot();
         if (!root) return;
 
         // 如果正在编辑，检查是否点击在编辑器内部
         if (this.editorManager.isEditing()) {
-            const target = e.target as HTMLElement;
             // 如果点击的是编辑器元素或其子元素，不结束编辑
             if (target.closest(".ss-editor")) {
                 return;
@@ -648,7 +652,6 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         }
 
         // 检查是否点击了预览浮层
-        const target = e.target as HTMLElement;
         if (target.closest(".ss-cell-expand-overlay")) {
             // 点击了预览浮层，不处理（让预览浮层自己处理）
             return;
@@ -693,8 +696,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             return;
         }
 
-        // 聚焦表格
-        root.focus();
+        // 注意：不调用 root.focus()，防止浏览器自动滚动
 
         // 检查是否点击了行号单元格（选中整行）
         const rowNumberCell = target.closest(".ss-row-number");
@@ -773,8 +775,18 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             }
         }
 
-        const pos = getMousePosition(e, root);
-        const cell = this.renderer.getCellFromPoint(pos.x, pos.y);
+        // 直接从点击目标获取单元格位置，不再使用 getBoundingClientRect 计算坐标
+        // 这样可以避免触发同步布局重计算，防止浏览器自动滚动
+        const cellElement = target.closest('.ss-cell') as HTMLElement;
+        let cell: { row: number; col: number } | null = null;
+
+        if (cellElement) {
+            const row = parseInt(cellElement.dataset.row || '-1', 10);
+            const col = parseInt(cellElement.dataset.col || '-1', 10);
+            if (row >= 0 && col >= 0) {
+                cell = { row, col };
+            }
+        }
 
         if (!cell) return;
 
@@ -839,10 +851,9 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             this.selectionManager.startDragSelection(cell.row, cell.col);
         }
 
-        // 滚动到单元格
-        this.renderer.scrollToCell(cell.row, cell.col);
+        // 注意：点击时不自动滚动，用户已经滚动到了想要的位置
 
-        // 根据列类型显示对应的悬浮窗
+        // 根据列类型显示对应的悬浮窗（延迟到下一个事件循环，避免在事件处理中触发布局变化导致滚动跳跃）
         const column = this.options.columns[cell.col];
         const cellValue = this.dataModel.getCellValue(cell.row, cell.col);
         const rowData = this.dataModel.getRowData(cell.row) || {};
@@ -852,70 +863,75 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             const cellEl = this.renderer.getCellElement(cell.row, cell.col);
 
             if (cellEl) {
-                if (column.type === "file") {
-                    // 文件类型 - 显示文件列表预览
-                    this.showFilePreview(cellEl, cellValue, cell.row, cell.col);
-                } else if (column.type === "link" || column.type === "email" || column.type === "phone") {
-                    // 链接/邮箱/电话类型 - 显示悬浮窗
-                    showPopover(cellEl, cellValue, rowData, {
-                        type: column.type,
-                        valueField: column.key,
-                    });
-                } else if (column.type === "select") {
-                    // 标签类型（select）- 显示标签悬浮窗
-                    showPopover(cellEl, cellValue, rowData, {
-                        type: 'tags',
-                        tagsField: column.key,
-                        tagOptions: column.options?.map(opt => ({
-                            value: opt.value,
-                            label: opt.label,
-                            color: opt.color,
-                            textColor: opt.textColor
-                        })) || [],
-                        multiple: column.multiple ?? false, // 使用列配置的多选属性，默认单选
-                        onChange: (newValue: any) => {
-                            // 更新单元格值
-                            this.dataModel.setCellValue(cell.row, cell.col, newValue);
-                            // 重新渲染单元格
-                            this.renderer.render();
-                            // 触发数据变更事件
-                            this.emit("data:change", {
-                                type: "set",
-                                changes: [{
-                                    row: cell.row,
-                                    col: cell.col,
-                                    oldValue: cellValue,
-                                    newValue
-                                }]
-                            });
-                        }
-                    });
-                } else if (column.expandPopover) {
-                    // 自定义悬浮窗配置
-                    showPopover(cellEl, cellValue, rowData, column.expandPopover);
-                } else {
-                    // 检查是否是多行文本，如果是，使用悬浮窗显示预览
-                    // 注意：这里需要检查 wrapText 配置，如果配置了换行，即使没有省略号也应该显示预览
-                    const fullText = cellEl.getAttribute("data-full-text");
-                    if (fullText) {
-                        // 检查是否配置了换行模式
-                        const wrapText = column.wrapText;
-                        const hasNewlines = fullText.includes("\n");
-                        const cellText = cellEl.textContent || "";
-                        const hasEllipsis = cellText.includes("...");
+                // 延迟显示悬浮窗，避免在事件处理期间触发布局重计算
+                const showPopovers = () => {
+                    if (column.type === "file") {
+                        // 文件类型 - 显示文件列表预览
+                        this.showFilePreview(cellEl, cellValue, cell.row, cell.col);
+                    } else if (column.type === "link" || column.type === "email" || column.type === "phone") {
+                        // 链接/邮箱/电话类型 - 显示悬浮窗
+                        showPopover(cellEl, cellValue, rowData, {
+                            type: column.type,
+                            valueField: column.key,
+                        });
+                    } else if (column.type === "select") {
+                        // 标签类型（select）- 显示标签悬浮窗
+                        showPopover(cellEl, cellValue, rowData, {
+                            type: 'tags',
+                            tagsField: column.key,
+                            tagOptions: column.options?.map(opt => ({
+                                value: opt.value,
+                                label: opt.label,
+                                color: opt.color,
+                                textColor: opt.textColor
+                            })) || [],
+                            multiple: column.multiple ?? false, // 使用列配置的多选属性，默认单选
+                            onChange: (newValue: any) => {
+                                // 更新单元格值
+                                this.dataModel.setCellValue(cell.row, cell.col, newValue);
+                                // 重新渲染单元格
+                                this.renderer.render();
+                                // 触发数据变更事件
+                                this.emit("data:change", {
+                                    type: "set",
+                                    changes: [{
+                                        row: cell.row,
+                                        col: cell.col,
+                                        oldValue: cellValue,
+                                        newValue
+                                    }]
+                                });
+                            }
+                        });
+                    } else if (column.expandPopover) {
+                        // 自定义悬浮窗配置
+                        showPopover(cellEl, cellValue, rowData, column.expandPopover);
+                    } else {
+                        // 检查是否是多行文本，如果是，使用悬浮窗显示预览
+                        // 注意：这里需要检查 wrapText 配置，如果配置了换行，即使没有省略号也应该显示预览
+                        const fullText = cellEl.getAttribute("data-full-text");
+                        if (fullText) {
+                            // 检查是否配置了换行模式
+                            const wrapText = column.wrapText;
+                            const hasNewlines = fullText.includes("\n");
+                            const cellText = cellEl.textContent || "";
+                            const hasEllipsis = cellText.includes("...");
 
-                        // 如果配置了换行模式（wrapText 为 'wrap'），或者包含换行符，或者有省略号，则显示预览
-                        if (wrapText === "wrap" || hasNewlines || hasEllipsis) {
-                            // 使用统一的悬浮窗显示完整文本（不显示标题）
-                            showPopover(cellEl, fullText, rowData, {
-                                type: 'text',
-                                content: fullText, // 使用 content 字段传递完整文本
-                                width: column.width,
-                                maxWidth: 400
-                            });
+                            // 如果配置了换行模式（wrapText 为 'wrap'），或者包含换行符，或者有省略号，则显示预览
+                            if (wrapText === "wrap" || hasNewlines || hasEllipsis) {
+                                // 使用统一的悬浮窗显示完整文本（不显示标题）
+                                showPopover(cellEl, fullText, rowData, {
+                                    type: 'text',
+                                    content: fullText, // 使用 content 字段传递完整文本
+                                    width: column.width,
+                                    maxWidth: 400
+                                });
+                            }
                         }
                     }
-                }
+                };
+                // 使用 setTimeout(0) 延迟到下一个事件循环，避免在事件处理期间触发布局变化
+                setTimeout(showPopovers, 0);
             }
         }
 
@@ -927,6 +943,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             column: column,
             originalEvent: e
         });
+
     }
 
     /** 拖动节流标记 */
@@ -952,7 +969,12 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         const root = this.renderer.getRoot();
         if (!root) return;
 
-        const pos = getMousePosition(e, root);
+        // 获取相对于根元素的坐标（每事件一次，避免多次触发布局重计算）
+        const rootRect = root.getBoundingClientRect();
+        const pos = {
+            x: e.clientX - rootRect.left,
+            y: e.clientY - rootRect.top
+        };
         const cell = this.renderer.getCellFromPoint(pos.x, pos.y);
 
         if (cell) {
@@ -1044,7 +1066,12 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         }
 
         // 普通单元格
-        const pos = getMousePosition(e, root);
+        // 获取相对于根元素的坐标（每事件一次，避免多次触发布局重计算）
+        const rootRect = root.getBoundingClientRect();
+        const pos = {
+            x: e.clientX - rootRect.left,
+            y: e.clientY - rootRect.top
+        };
         const cell = this.renderer.getCellFromPoint(pos.x, pos.y);
 
         if (cell) {
@@ -1052,8 +1079,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             // 这样菜单操作会基于新选中的单元格
             this.selectionManager.selectCell(cell.row, cell.col, false);
 
-            // 滚动到单元格
-            this.renderer.scrollToCell(cell.row, cell.col);
+            // 注意：右键时不自动滚动
 
             // 更新渲染以显示新的选中状态
             this.renderer.render();
@@ -1201,7 +1227,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
 
             const activeCell = this.selectionManager.getActiveCell();
             if (activeCell) {
-                this.renderer.scrollToCell(activeCell.row, activeCell.col);
+                this.renderer.scrollToCell(activeCell.row, activeCell.col, true, true);
             }
         }
     }
@@ -1236,7 +1262,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
 
         const activeCell = this.selectionManager.getActiveCell();
         if (activeCell) {
-            this.renderer.scrollToCell(activeCell.row, activeCell.col);
+            this.renderer.scrollToCell(activeCell.row, activeCell.col, true, true);
         }
     }
 
@@ -1502,7 +1528,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
 
         const activeCell = this.selectionManager.getActiveCell();
         if (activeCell) {
-            this.renderer.scrollToCell(activeCell.row, activeCell.col);
+            this.renderer.scrollToCell(activeCell.row, activeCell.col, true, true);
         }
     }
 
@@ -1520,7 +1546,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
 
         const activeCell = this.selectionManager.getActiveCell();
         if (activeCell) {
-            this.renderer.scrollToCell(activeCell.row, activeCell.col);
+            this.renderer.scrollToCell(activeCell.row, activeCell.col, true, true);
         }
     }
 
@@ -2119,8 +2145,8 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     /**
      * 滚动到单元格
      */
-    scrollToCell(row: number, col: number): void {
-        this.renderer.scrollToCell(row, col);
+    scrollToCell(row: number, col: number, force: boolean = false, scrollToVisible: boolean = false): void {
+        this.renderer.scrollToCell(row, col, force, scrollToVisible);
     }
 
     /**

@@ -43,7 +43,7 @@ export class Renderer {
   private scrollContainer: HTMLElement | null = null;
   private selectionLayer: HTMLElement | null = null;
   private editorLayer: HTMLElement | null = null;
-  
+
   private virtualScroll: VirtualScroll;
   private options: RendererOptions;
   
@@ -99,8 +99,6 @@ export class Renderer {
       rowNumberWidth: options.rowNumberWidth,
       showRowNumber: options.showRowNumber,
       getTotalHeight: () => this.getTotalHeight(),
-      getRowOffset: (rowIndex: number) => this.getRowOffset(rowIndex),
-      getRowIndexFromY: (y: number) => this.getRowIndexFromY(y),
     });
 
     this.init();
@@ -123,6 +121,9 @@ export class Renderer {
     
     // 创建滚动容器
     this.scrollContainer = createElement('div', 'ss-scroll-container');
+
+    // 强制禁用滚动锚定，防止浏览器自动滚动
+    (this.scrollContainer as HTMLElement).style.overflowAnchor = 'none';
 
     // 阻止滚动条区域的点击事件透传到单元格
     // 当点击滚动条轨道或滑块时，不应该触发单元格的选中
@@ -148,10 +149,17 @@ export class Renderer {
     
     // 创建选区层
     this.selectionLayer = createElement('div', 'ss-selection-layer');
-    
+
+    // 预先创建选区框元素（避免点击时添加新元素触发布局重计算）
+    this.selectionBox = createElement('div', 'ss-selection-box');
+    setStyles(this.selectionBox, {
+      display: 'none',  // 初始隐藏
+    });
+    this.selectionLayer.appendChild(this.selectionBox);
+
     // 创建编辑器层
     this.editorLayer = createElement('div', 'ss-editor-layer');
-    
+
     // 组装 DOM
     this.scrollContainer.appendChild(this.header);
     this.scrollContainer.appendChild(this.body);
@@ -225,8 +233,6 @@ export class Renderer {
     // 如果还没有渲染任何行，跳过
     if (this.rowCache.size === 0) return;
 
-    let needsUpdate = false;
-
     for (let rowIndex = startRow; rowIndex < endRow; rowIndex++) {
       // 找出所有 wrapText 列
       const wrapTextCols: Column[] = [];
@@ -242,7 +248,6 @@ export class Renderer {
         const currentHeight = this.rowHeights.get(rowIndex);
         if (currentHeight !== this.options.rowHeight) {
           this.rowHeights.set(rowIndex, this.options.rowHeight);
-          needsUpdate = true;
         }
         continue;
       }
@@ -269,14 +274,10 @@ export class Renderer {
       const currentHeight = this.rowHeights.get(rowIndex);
       if (currentHeight !== maxHeight) {
         this.rowHeights.set(rowIndex, maxHeight);
-        needsUpdate = true;
       }
     }
-
-    // 如果有更新，更新容器样式
-    if (needsUpdate) {
-      this.updateContainerStyles();
-    }
+    // 注意：不再这里调用 updateContainerStyles
+    // 行高同步只在 processNextBatch 完成所有计算后统一进行
   }
 
   /**
@@ -356,10 +357,8 @@ export class Renderer {
         });
       }
     }
-
-    // 更新容器样式和虚拟滚动
-    this.updateContainerStyles();
-    this.virtualScroll.update({});
+    // 注意：不再这里调用 updateContainerStyles
+    // 行高同步只在 processNextBatch 完成所有计算后进行
   }
 
   /**
@@ -381,12 +380,19 @@ export class Renderer {
     while (startRow < this.options.rowCount && this.rowHeights.has(startRow)) {
       startRow++;
     }
-    if (startRow >= this.options.rowCount) return;
+    if (startRow >= this.options.rowCount) {
+      // 所有行高都计算完成了，同步到 VirtualScroll
+      this.syncRowHeightsToVirtualScroll();
+      return;
+    }
 
     this.calculateRowHeightsBatch(startRow, this.BATCH_SIZE);
 
     if (this.pendingBatchCount > 0) {
       this.continuePrecalculateOnIdle();
+    } else {
+      // 没有更多批次，同步到 VirtualScroll
+      this.syncRowHeightsToVirtualScroll();
     }
   }
 
@@ -557,13 +563,27 @@ export class Renderer {
   }
 
   /**
-   * 更新容器样式
+   * 同步行高到 VirtualScroll
+   * 只在行高计算完成后调用，不在每次渲染时调用
    */
-  private updateContainerStyles(): void {
+  private syncRowHeightsToVirtualScroll(): void {
+    if (this.rowHeights.size > 0) {
+      this.virtualScroll.setRowHeights(this.rowHeights);
+      // 强制更新 VirtualScroll 的总高度计算
+      this.virtualScroll.update({});
+      // 更新容器样式
+      this.updateContainerStylesInternal();
+    }
+  }
+
+  /**
+   * 更新容器样式（内部方法，不同步行高）
+   */
+  private updateContainerStylesInternal(): void {
     const totalWidth = this.virtualScroll.getTotalWidth();
     const totalHeight = this.virtualScroll.getTotalHeight();
     const verticalPadding = this.options.verticalPadding || 0;
-    
+
     if (this.bodyContent) {
       setStyles(this.bodyContent, {
         width: `${totalWidth}px`,
@@ -572,20 +592,23 @@ export class Renderer {
         paddingBottom: `${verticalPadding}px`,
       });
     }
-    
+
     // 设置表头宽度，确保与内容宽度一致
     if (this.header) {
       setStyles(this.header, {
         width: `${totalWidth}px`,
       });
     }
-    
-    if (this.headerRow) {
-      setStyles(this.headerRow, {
-        width: `${totalWidth}px`,
-        height: `${this.options.headerHeight}px`,
-      });
-    }
+  }
+
+  /**
+   * 更新容器样式
+   */
+  private updateContainerStyles(): void {
+    // 不再在这里同步行高到 VirtualScroll
+    // 行高同步只在行高计算完成后通过 syncRowHeightsToVirtualScroll() 进行
+    // 这样可以避免滚动时动态行高导致的滚动锚定问题
+    this.updateContainerStylesInternal();
   }
 
   /**
@@ -813,9 +836,8 @@ export class Renderer {
     // 第二遍：检查是否需要扩展渲染范围
     // 如果某些行的实际高度远大于默认高度，可能需要渲染更多行来填满可视区域
     const scrollTop = this.virtualScroll.getScrollTop();
-    // 获取视口高度（通过容器元素）
-    const containerRect = this.container?.getBoundingClientRect();
-    const viewportHeight = (containerRect?.height || 0) - this.options.headerHeight;
+    // 使用缓存的视口高度，避免在渲染过程中调用 getBoundingClientRect()
+    const viewportHeight = this.virtualScroll.getViewportHeight();
     const bottomY = scrollTop + viewportHeight;
     
     // 计算当前渲染范围的实际底部位置
@@ -879,8 +901,8 @@ export class Renderer {
         const rowTop = this.getRowOffset(rowIndex);
         const rowBottom = rowTop + (this.rowHeights.get(rowIndex) || this.options.rowHeight);
         const scrollTop = this.virtualScroll.getScrollTop();
-        const containerRect = this.container?.getBoundingClientRect();
-        const viewportHeight = (containerRect?.height || 0) - this.options.headerHeight;
+        // 使用缓存的视口高度，避免在渲染过程中调用 getBoundingClientRect()
+        const viewportHeight = this.virtualScroll.getViewportHeight();
         const viewportBottom = scrollTop + viewportHeight;
         
         // 如果行距离可视区域太远（超过2个视口高度），才移除
@@ -1281,7 +1303,7 @@ export class Renderer {
     for (const cell of selectedCells) {
       newSelectedSet.add(`${cell.row}:${cell.col}`);
     }
-    
+
     // 移除不再选中的单元格的选中样式
     for (const cellKey of this.selectedCells) {
       if (!newSelectedSet.has(cellKey)) {
@@ -1292,7 +1314,7 @@ export class Renderer {
         }
       }
     }
-    
+
     // 添加新选中单元格的选中样式
     for (const cellKey of newSelectedSet) {
       if (!this.selectedCells.has(cellKey)) {
@@ -1303,13 +1325,13 @@ export class Renderer {
         }
       }
     }
-    
+
     // 更新活动单元格样式
     // 先清除所有活动单元格样式
     for (const cell of this.cellCache.values()) {
       cell.classList.remove('ss-cell-active');
     }
-    
+
     // 设置新的活动单元格样式
     if (activeCell) {
       const activeCellKey = `${activeCell.row}:${activeCell.col}`;
@@ -1318,12 +1340,13 @@ export class Renderer {
         activeCellEl.classList.add('ss-cell-active');
       }
     }
-    
+
     // 更新内部状态
     this.selectedCells = newSelectedSet;
     this.activeCell = activeCell;
-    
-    // 更新选区边框层（不重新渲染整个表格）
+
+    // 立即更新选区边框层，不使用 RAF 延迟
+    // 因为延迟可能导致滚动跳动问题
     this.renderSelectionBorder(selectedCells, activeCell);
   }
 
@@ -1343,86 +1366,119 @@ export class Renderer {
 
   /**
    * 渲染选区边框
-   * 重构：使用表头单元格的位置来确定水平位置（表头使用 flex 布局，位置一定正确）
+   * 使用计算值而非 getBoundingClientRect()，避免在事件处理中触发布局重计算导致滚动跳动
    */
   private renderSelectionBorder(
     selectedCells: Array<{ row: number; col: number }>,
     activeCell: { row: number; col: number } | null
   ): void {
-    if (!this.selectionLayer || !this.scrollContainer || !this.root || !this.headerRow) return;
-    
-    // 只移除选区框，保留其他元素（如填充手柄）
-    if (this.selectionBox) {
-      this.selectionBox.remove();
-      this.selectionBox = null;
+    if (!this.selectionLayer || !this.scrollContainer) return;
+
+    // 如果没有选中区域，隐藏选区框（不删除，避免触发布局重计算）
+    if (selectedCells.length === 0) {
+      if (this.selectionBox) {
+        setStyles(this.selectionBox, { display: 'none' });
+      }
+      return;
     }
-    
-    if (selectedCells.length === 0) return;
-    
+
+    // 如果选区框不存在（不应该发生，因为我们在 init 中创建了），则创建
+    if (!this.selectionBox) {
+      this.selectionBox = createElement('div', 'ss-selection-box');
+      this.selectionLayer.appendChild(this.selectionBox);
+    }
+
     // 计算选区边界
     let minRow = Infinity, maxRow = -Infinity;
     let minCol = Infinity, maxCol = -Infinity;
-    
+
     for (const cell of selectedCells) {
       minRow = Math.min(minRow, cell.row);
       maxRow = Math.max(maxRow, cell.row);
       minCol = Math.min(minCol, cell.col);
       maxCol = Math.max(maxCol, cell.col);
     }
-    
-    // 使用表头单元格来确定水平位置（表头使用 flex 布局，位置一定正确）
-    const headerCells = this.headerRow.querySelectorAll('.ss-header-cell:not(.ss-corner-cell)');
-    const minColHeader = headerCells[minCol] as HTMLElement;
-    const maxColHeader = headerCells[maxCol] as HTMLElement;
-    
-    if (!minColHeader || !maxColHeader) {
-      // 如果找不到表头单元格，不显示选区框
-      return;
-    }
-    
-    const rootRect = this.root.getBoundingClientRect();
-    const scrollTop = this.scrollContainer.scrollTop;
-    
-    // 水平位置从表头获取（最可靠）
-    const minColRect = minColHeader.getBoundingClientRect();
-    const maxColRect = maxColHeader.getBoundingClientRect();
-    
-    const left = minColRect.left - rootRect.left;
-    const width = maxColRect.right - minColRect.left;
-    
+
+    // 使用计算值获取水平位置（使用实际列宽）
+    const scrollLeft = this.scrollContainer.scrollLeft;
+    const left = this.getColumnOffsetDirect(minCol) - scrollLeft;
+    const width = this.getColumnOffsetDirect(maxCol + 1) - this.getColumnOffsetDirect(minCol);
+
     // 垂直位置通过计算获取（使用实际行高）
-    const top = this.getRowOffset(minRow) + this.options.headerHeight - scrollTop;
+    // selectionLayer 覆盖整个 root，top: 0 对应 scrollContainer 的顶部
+    // 需要加上 headerHeight 和 verticalPadding
+    const scrollTop = this.scrollContainer.scrollTop;
+    const verticalPadding = this.options.verticalPadding || 0;
+    const rowOffset = this.getRowOffset(minRow);
+    const top = rowOffset + this.options.headerHeight + verticalPadding - scrollTop;
+
     let height = 0;
     for (let i = minRow; i <= maxRow; i++) {
       height += this.getRowHeight(i);
     }
-    
-    this.selectionBox = createElement('div', 'ss-selection-box');
+
+    // 创建或更新选区框（避免移除/重新添加导致布局重计算）
+    if (!this.selectionBox) {
+      this.selectionBox = createElement('div', 'ss-selection-box');
+      this.selectionLayer.appendChild(this.selectionBox);
+    }
     setStyles(this.selectionBox, {
       top: `${top}px`,
       left: `${left}px`,
       width: `${width}px`,
       height: `${height}px`,
+      display: '',
     });
-    this.selectionLayer.appendChild(this.selectionBox);
   }
 
   /**
+   * 是否已完成首次行高计算
+   * 只在首次渲染后计算一次行高，之后滚动时不再重新计算
+   * 这是 Excel 的实现思路：滚动时不重新计算行高
+   */
+  private hasInitialRowHeightCalculated: boolean = false;
+
+  /**
    * 处理虚拟滚动变化
+   * Excel 思路：滚动时不重新计算行高，只在首次渲染后计算一次
    */
   private handleVirtualScrollChange(state: VirtualScrollState): void {
     // 确保状态有效
     if (state.startRow >= 0 && state.endRow >= state.startRow) {
-      // 即使 endRow 超出范围，也要渲染（可能是计算误差）
+      // 渲染行（不包含行高修正）
       this.renderRows(state);
 
-      // 首屏渲染后修正行高（使用 requestAnimationFrame 确保 DOM 已完成渲染）
-      if (this.rowCache.size > 0) {
-        requestAnimationFrame(() => {
-          this.correctVisibleRowHeights();
-        });
+      // 只在首次渲染后计算一次行高（用于自动行高模式）
+      // 之后滚动时不再重新计算，避免滚动锚定问题
+      if (!this.hasInitialRowHeightCalculated && this.rowCache.size > 0) {
+        this.hasInitialRowHeightCalculated = true;
+        // 使用 requestIdleCallback 异步计算，不阻塞滚动
+        if ('requestIdleCallback' in window) {
+          (window as any).requestIdleCallback(() => {
+            this.calculateInitialRowHeights();
+          });
+        } else {
+          setTimeout(() => {
+            this.calculateInitialRowHeights();
+          }, 100);
+        }
       }
     }
+  }
+
+  /**
+   * 计算初始行高（仅在首次渲染后调用一次）
+   * 用于 wrapText 模式的自动行高计算
+   */
+  private calculateInitialRowHeights(): void {
+    // 检查是否需要计算行高（只有 wrapText 列才需要）
+    const hasWrapText = this.options.columns.some(col =>
+      col.wrapText === 'wrap' || col.wrapText === 'fixed'
+    );
+    if (!hasWrapText) return;
+
+    // 分批计算，避免阻塞
+    this.schedulePrecalculateRowHeights();
   }
 
   /**
@@ -1430,7 +1486,7 @@ export class Renderer {
    */
   private handleScroll(): void {
     // 表头在滚动容器内部，会自然跟随水平滚动，不需要手动同步
-    
+
     // 更新选区位置
     if (this.activeCell) {
       this.renderSelectionBorder(
@@ -1549,24 +1605,27 @@ export class Renderer {
 
   getCellFromPoint(x: number, y: number): { row: number; col: number } | null {
     if (!this.scrollContainer) return null;
-    
+
     const scrollTop = this.scrollContainer.scrollTop;
     const scrollLeft = this.scrollContainer.scrollLeft;
-    
-    // 减去表头高度
-    const adjustedY = y - this.options.headerHeight + scrollTop;
+
+    // 获取 bodyContent 的 paddingTop
+    const verticalPadding = this.options.verticalPadding || 0;
+
+    // 计算相对于 bodyContent 的 Y 坐标（考虑表头和 padding）
+    const adjustedY = y - this.options.headerHeight - verticalPadding + scrollTop;
     const adjustedX = x + scrollLeft;
-    
+
     if (adjustedY < 0) return null;
-    
+
     // 使用实际行高计算行索引
     const row = this.getRowIndexFromY(adjustedY);
     const col = this.virtualScroll.getColumnIndexFromX(adjustedX);
-    
+
     if (row < 0 || row >= this.options.rowCount || col < 0) {
       return null;
     }
-    
+
     return { row, col };
   }
 
@@ -1609,16 +1668,10 @@ export class Renderer {
    */
   getTotalHeight(): number {
     let totalHeight = 0;
-    let maxRowIndex = -1;
     for (let i = 0; i < this.options.rowCount; i++) {
       const rowHeight = this.rowHeights.get(i) || this.options.rowHeight;
       totalHeight += rowHeight;
-      if (rowHeight > this.options.rowHeight) {
-        maxRowIndex = i;
-      }
     }
-    // 调试日志（可以删除）
-    // console.log(`[getTotalHeight] totalHeight: ${totalHeight}, rowCount: ${this.options.rowCount}, maxRowIndex: ${maxRowIndex}`);
     return totalHeight;
   }
 
@@ -1643,41 +1696,60 @@ export class Renderer {
 
   /**
    * 滚动到指定单元格（使用实际行高）
+   * @param force 强制滚动，即使单元格已在可见区域内
+   * @param scrollToVisible 是否在单元格不可见时滚动（默认 true）
    */
-  scrollToCell(row: number, col: number): void {
+  scrollToCell(row: number, col: number, force: boolean = false, scrollToVisible: boolean = true): void {
     if (!this.scrollContainer || !this.root) return;
-    
-    const viewportRect = this.root.getBoundingClientRect();
-    const viewportHeight = viewportRect.height - this.options.headerHeight;
-    const viewportWidth = viewportRect.width;
-    
+
+    // 如果不强制滚动且不要求不可见时滚动，则直接返回
+    if (!force && !scrollToVisible) {
+      return;
+    }
+
+    // 使用缓存的视口尺寸，避免调用 getBoundingClientRect()
+    const viewportHeight = this.virtualScroll.getViewportHeight();
+    const viewportWidth = this.virtualScroll.getViewportWidth();
+
     const cellTop = this.getRowOffset(row);
     const cellLeft = this.getColumnOffsetDirect(col);
     const cellWidth = this.options.columns[col]?.width ?? 100;
     const cellHeight = this.getRowHeight(row);
     const cellBottom = cellTop + cellHeight;
     const cellRight = cellLeft + cellWidth;
-    
+
     const scrollTop = this.scrollContainer.scrollTop;
     const scrollLeft = this.scrollContainer.scrollLeft;
-    
+
+    // 检查单元格是否已经在可见区域内
+    const isCellVisible =
+      cellTop >= scrollTop &&
+      cellBottom <= scrollTop + viewportHeight &&
+      cellLeft >= scrollLeft &&
+      cellRight <= scrollLeft + viewportWidth;
+
+    // 如果单元格已在可见区域内且不是强制滚动，则不滚动
+    if (isCellVisible && !force) {
+      return;
+    }
+
     let newScrollTop = scrollTop;
     let newScrollLeft = scrollLeft;
-    
+
     // 垂直方向
     if (cellTop < scrollTop) {
       newScrollTop = cellTop;
     } else if (cellBottom > scrollTop + viewportHeight) {
       newScrollTop = cellBottom - viewportHeight;
     }
-    
+
     // 水平方向
     if (cellLeft < scrollLeft) {
       newScrollLeft = cellLeft;
     } else if (cellRight > scrollLeft + viewportWidth) {
       newScrollLeft = cellRight - viewportWidth;
     }
-    
+
     if (newScrollTop !== scrollTop || newScrollLeft !== scrollLeft) {
       this.scrollContainer.scrollTo({
         top: newScrollTop,

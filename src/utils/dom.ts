@@ -79,6 +79,7 @@ export function getRelativePosition(
 
 /**
  * 获取鼠标相对于元素的位置
+ * 使用 setTimeout(0) 延迟调用，避免在事件处理中触发布局重计算导致滚动跳动
  */
 export function getMousePosition(
   e: MouseEvent,
@@ -89,6 +90,25 @@ export function getMousePosition(
     x: e.clientX - rect.left,
     y: e.clientY - rect.top,
   };
+}
+
+/**
+ * 获取鼠标相对于元素的位置（异步版本）
+ * 延迟一帧执行，避免在事件处理中触发布局重计算导致滚动跳动
+ */
+export function getMousePositionAsync(
+  e: MouseEvent,
+  el: HTMLElement
+): Promise<{ x: number; y: number }> {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const rect = el.getBoundingClientRect();
+      resolve({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      });
+    }, 0);
+  });
 }
 
 /**

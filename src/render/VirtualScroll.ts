@@ -29,17 +29,13 @@ interface VirtualScrollOptions {
   showRowNumber?: boolean;
   /** 获取实际总高度的回调函数（用于动态行高） */
   getTotalHeight?: () => number;
-  /** 获取行偏移量的回调函数（用于动态行高） */
-  getRowOffset?: (rowIndex: number) => number;
-  /** 获取行索引的回调函数（用于动态行高） */
-  getRowIndexFromY?: (y: number) => number;
 }
 
 export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
   private container: HTMLElement | null = null;
   private viewport: HTMLElement | null = null;
   private scrollContainer: HTMLElement | null = null;
-  
+
   private rowHeight: number;
   private headerHeight: number;
   private columns: Column[];
@@ -48,8 +44,12 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
   private rowNumberWidth: number;
   private showRowNumber: boolean;
   private getTotalHeightFn?: () => number;
-  private getRowOffsetFn?: (rowIndex: number) => number;
-  private getRowIndexFromYFn?: (y: number) => number;
+
+  /** 内部行高缓存（支持动态行高） */
+  private rowHeights: Map<number, number> = new Map();
+
+  /** 是否有动态行高（如果有，则使用累加计算） */
+  private hasDynamicHeights: boolean = false;
   
   private state: VirtualScrollState = {
     startRow: 0,
@@ -62,9 +62,12 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
   
   private scrollHandler: (() => void) | null = null;
   private pendingUpdate: boolean = false;
-  private scrollRafId: number | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private handleScrollEnd: (() => void) | null = null;
+
+  /** 缓存的视口尺寸（只在调整大小时更新，避免滚动跳动） */
+  private cachedViewportHeight: number = 0;
+  private cachedViewportWidth: number = 0;
 
   constructor(options: VirtualScrollOptions) {
     super();
@@ -77,8 +80,6 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
     this.rowNumberWidth = options.rowNumberWidth ?? 50;
     this.showRowNumber = options.showRowNumber ?? true;
     this.getTotalHeightFn = options.getTotalHeight;
-    this.getRowOffsetFn = options.getRowOffset;
-    this.getRowIndexFromYFn = options.getRowIndexFromY;
   }
 
   /**
@@ -88,50 +89,32 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
     this.container = container;
     this.viewport = viewport;
     this.scrollContainer = scrollContainer;
-    
+
+    // 先初始化视口尺寸缓存
+    this.updateCachedViewportSize();
+
     // 监听滚动事件
-    // 对于虚拟滚动，我们需要在滚动过程中及时更新
-    // 关键优化：使用更积极的更新策略，确保滚动时内容不消失
-    let lastScrollTop = scrollContainer.scrollTop;
-    
+    // 直接处理，不使用 rafThrottle，避免因节流导致的滚动锚定问题
     this.scrollHandler = () => {
-      const currentScrollTop = scrollContainer.scrollTop;
-      const scrollDelta = Math.abs(currentScrollTop - lastScrollTop);
-      
-      // 如果滚动距离较大，立即更新（避免大滚动时出现空白）
-      if (scrollDelta > 50) {
-        if (this.scrollRafId) {
-          cancelAnimationFrame(this.scrollRafId);
-          this.scrollRafId = null;
-        }
-        lastScrollTop = currentScrollTop;
-        this.handleScroll();
-      } else {
-        // 小滚动使用 RAF 节流
-        if (!this.scrollRafId) {
-          this.scrollRafId = requestAnimationFrame(() => {
-            lastScrollTop = scrollContainer.scrollTop;
-            this.handleScroll();
-            this.scrollRafId = null;
-          });
-        }
-      }
+      this.handleScroll();
     };
     scrollContainer.addEventListener('scroll', this.scrollHandler, { passive: true });
-    
+
     // 添加 scrollend 事件监听（如果浏览器支持）
     // 确保滚动完全停止后也能更新
     if ('onscrollend' in scrollContainer) {
       this.handleScrollEnd = this.createScrollEndHandler();
       scrollContainer.addEventListener('scrollend', this.handleScrollEnd, { passive: true });
     }
-    
+
     // 监听容器大小变化
     this.resizeObserver = new ResizeObserver(rafThrottle(() => {
+      // 先更新缓存的视口尺寸
+      this.updateCachedViewportSize();
       this.calculate();
     }));
     this.resizeObserver.observe(viewport);
-    
+
     // 初始计算并触发 change 事件
     this.calculate();
     this.emit('change', this.state);
@@ -141,10 +124,6 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
    * 卸载
    */
   unmount(): void {
-    if (this.scrollRafId) {
-      cancelAnimationFrame(this.scrollRafId);
-      this.scrollRafId = null;
-    }
     if (this.scrollContainer && this.scrollHandler) {
       this.scrollContainer.removeEventListener('scroll', this.scrollHandler);
       // 移除 scrollend 事件监听
@@ -188,9 +167,7 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
     if (options.rowNumberWidth !== undefined) this.rowNumberWidth = options.rowNumberWidth;
     if (options.showRowNumber !== undefined) this.showRowNumber = options.showRowNumber;
     if (options.getTotalHeight !== undefined) this.getTotalHeightFn = options.getTotalHeight;
-    if (options.getRowOffset !== undefined) this.getRowOffsetFn = options.getRowOffset;
-    if (options.getRowIndexFromY !== undefined) this.getRowIndexFromYFn = options.getRowIndexFromY;
-    
+
     this.calculate();
   }
 
@@ -205,6 +182,14 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
    * 获取总内容高度
    */
   getTotalHeight(): number {
+    // 如果有动态行高，使用内部缓存计算
+    if (this.hasDynamicHeights && this.rowHeights.size > 0) {
+      let totalHeight = 0;
+      for (let i = 0; i < this.rowCount; i++) {
+        totalHeight += this.rowHeights.get(i) ?? this.rowHeight;
+      }
+      return totalHeight;
+    }
     if (this.getTotalHeightFn) {
       return this.getTotalHeightFn();
     }
@@ -220,6 +205,30 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
       width += col.width ?? 100;
     }
     return width;
+  }
+
+  /**
+   * 获取视口高度（缓存值）
+   */
+  getViewportHeight(): number {
+    return this.cachedViewportHeight;
+  }
+
+  /**
+   * 获取视口宽度（缓存值）
+   */
+  getViewportWidth(): number {
+    return this.cachedViewportWidth;
+  }
+
+  /**
+   * 更新缓存的视口尺寸（只在调整大小时调用）
+   */
+  private updateCachedViewportSize(): void {
+    if (!this.viewport) return;
+    const viewportRect = this.viewport.getBoundingClientRect();
+    this.cachedViewportHeight = Math.max(0, viewportRect.height - this.headerHeight);
+    this.cachedViewportWidth = Math.max(0, viewportRect.width);
   }
 
   /**
@@ -241,25 +250,62 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
   }
 
   /**
-   * 获取行的起始位置（需要外部提供实际行高信息）
-   * 如果提供了回调函数，使用回调函数；否则使用固定行高估算
+   * 获取单行行高
    */
-  getRowOffset(rowIndex: number): number {
-    if (this.getRowOffsetFn) {
-      return this.getRowOffsetFn(rowIndex);
-    }
-    return rowIndex * this.rowHeight;
+  getRowHeight(rowIndex: number): number {
+    return this.rowHeights.get(rowIndex) ?? this.rowHeight;
   }
 
   /**
-   * 根据 Y 坐标获取行索引（需要外部提供实际行高信息）
-   * 如果提供了回调函数，使用回调函数；否则使用固定行高估算
+   * 设置行高（由 Renderer 调用）
+   */
+  setRowHeight(rowIndex: number, height: number): void {
+    if (height !== this.rowHeight) {
+      this.rowHeights.set(rowIndex, height);
+      this.hasDynamicHeights = true;
+    } else {
+      this.rowHeights.delete(rowIndex);
+    }
+  }
+
+  /**
+   * 批量设置行高
+   */
+  setRowHeights(heights: Map<number, number>): void {
+    this.rowHeights = new Map(heights);
+    this.hasDynamicHeights = this.rowHeights.size > 0;
+  }
+
+  /**
+   * 获取行的起始位置（使用内部 rowHeights 缓存）
+   */
+  getRowOffset(rowIndex: number): number {
+    if (!this.hasDynamicHeights || this.rowHeights.size === 0) {
+      return rowIndex * this.rowHeight;
+    }
+    let offset = 0;
+    for (let i = 0; i < rowIndex; i++) {
+      offset += this.rowHeights.get(i) ?? this.rowHeight;
+    }
+    return offset;
+  }
+
+  /**
+   * 根据 Y 坐标获取行索引（使用内部 rowHeights 缓存）
    */
   getRowIndexFromY(y: number): number {
-    if (this.getRowIndexFromYFn) {
-      return this.getRowIndexFromYFn(y);
+    if (!this.hasDynamicHeights || this.rowHeights.size === 0) {
+      return Math.floor(y / this.rowHeight);
     }
-    return Math.floor(y / this.rowHeight);
+    let currentOffset = 0;
+    for (let i = 0; i < this.rowCount; i++) {
+      const rowHeight = this.rowHeights.get(i) ?? this.rowHeight;
+      if (y < currentOffset + rowHeight) {
+        return i;
+      }
+      currentOffset += rowHeight;
+    }
+    return this.rowCount - 1;
   }
 
   /**
@@ -288,11 +334,17 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
    */
   scrollToCell(row: number, col: number, behavior: ScrollBehavior = 'smooth'): void {
     if (!this.scrollContainer || !this.viewport) return;
-    
-    const viewportRect = this.viewport.getBoundingClientRect();
-    const viewportHeight = viewportRect.height - this.headerHeight;
-    const viewportWidth = viewportRect.width;
-    
+
+    // 使用缓存的视口尺寸，如果缓存无效则使用实际测量值
+    let viewportHeight = this.cachedViewportHeight;
+    let viewportWidth = this.cachedViewportWidth;
+
+    if (viewportHeight <= 0 || viewportWidth <= 0) {
+      const viewportRect = this.viewport.getBoundingClientRect();
+      viewportHeight = Math.max(0, viewportRect.height - this.headerHeight);
+      viewportWidth = Math.max(0, viewportRect.width);
+    }
+
     // 注意：这里使用固定行高，但实际应该通过 Renderer 获取实际行高
     // 由于 VirtualScroll 不直接访问 Renderer，这里保持固定行高计算
     // 实际的滚动位置计算会在 Renderer.scrollToCell 中处理
@@ -336,7 +388,7 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
    */
   scrollToRow(row: number, behavior: ScrollBehavior = 'smooth'): void {
     if (!this.scrollContainer) return;
-    
+
     const top = this.getRowOffset(row);
     this.scrollContainer.scrollTo({ top, behavior });
   }
@@ -346,7 +398,7 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
    */
   scrollToColumn(col: number, behavior: ScrollBehavior = 'smooth'): void {
     if (!this.scrollContainer) return;
-    
+
     const left = this.getColumnOffset(col);
     this.scrollContainer.scrollTo({ left, behavior });
   }
@@ -371,13 +423,13 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
   private handleScroll(): void {
     // 先保存旧状态
     const oldState = { ...this.state };
-    
+
     // 计算新状态
     this.calculate();
-    
+
     // 触发 scroll 事件（用于其他需要实时滚动位置的场景）
     this.emit('scroll', this.state);
-    
+
     // 只有当状态真正变化时才触发 change 事件（避免过度渲染）
     // 但需要立即触发，不能延迟，否则会导致滚动时内容空白
     const stateChanged = (
@@ -386,7 +438,7 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
       oldState.startCol !== this.state.startCol ||
       oldState.endCol !== this.state.endCol
     );
-    
+
     if (stateChanged) {
       // 立即触发 change 事件，确保渲染及时
       this.emit('change', this.state);
@@ -401,9 +453,21 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
 
     const scrollTop = this.scrollContainer.scrollTop;
     const scrollLeft = this.scrollContainer.scrollLeft;
-    const viewportRect = this.viewport.getBoundingClientRect();
-    const viewportHeight = viewportRect.height - this.headerHeight;
-    const viewportWidth = viewportRect.width;
+
+    // 使用缓存的视口尺寸，避免在滚动事件中调用 getBoundingClientRect()
+    // 只有当缓存值有效（非0且合理）时才使用，否则使用 getBoundingClientRect()
+    let viewportHeight = this.cachedViewportHeight;
+    let viewportWidth = this.cachedViewportWidth;
+
+    // 如果缓存值无效，使用实际测量值
+    if (viewportHeight <= 0 || viewportWidth <= 0) {
+      const viewportRect = this.viewport.getBoundingClientRect();
+      viewportHeight = Math.max(0, viewportRect.height - this.headerHeight);
+      viewportWidth = Math.max(0, viewportRect.width);
+      // 更新缓存
+      this.cachedViewportHeight = viewportHeight;
+      this.cachedViewportWidth = viewportWidth;
+    }
 
     // 避免除以零
     const safeRowHeight = this.rowHeight || 36;
@@ -429,38 +493,11 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
 
     // 确保 startRow 最小为 0
     startRow = Math.max(0, startRow);
-    
-    // 如果提供了 getRowIndexFromYFn，并且已经有一些行被渲染过，可以尝试使用动态行高优化
-    // 但只用于微调，不用于主要计算
-    if (this.getRowIndexFromYFn && this.rowCount > 0) {
-      try {
-        const topRow = this.getRowIndexFromYFn(Math.max(0, scrollTop));
-        const bottomRow = this.getRowIndexFromYFn(Math.min(scrollTop + viewportHeight, this.getTotalHeight()));
 
-        // 只有当计算结果合理且与固定行高估算接近时才使用
-        if (
-          topRow >= 0 &&
-          topRow < this.rowCount &&
-          bottomRow >= topRow &&
-          bottomRow < this.rowCount
-        ) {
-          // 取固定行高和动态行高的并集，确保覆盖足够范围
-          const dynamicStartRow = Math.max(0, topRow - this.buffer);
-          const dynamicEndRow = Math.min(this.rowCount - 1, bottomRow + this.buffer);
-
-          // 取并集
-          startRow = Math.min(startRow, dynamicStartRow);
-          endRow = Math.max(endRow, dynamicEndRow);
-
-          // 确保 endRow >= startRow
-          if (endRow < startRow) {
-            endRow = startRow;
-          }
-        }
-      } catch (e) {
-        // 如果计算出错，使用固定行高估算
-      }
-    }
+    // 【重要】滚动时始终使用固定行高计算可视区域
+    // 不使用 hasDynamicHeights，避免滚动时动态行高导致滚动锚定问题
+    // 动态行高只用于 offsetY 位置计算（见下方第565行）
+    // 这样可以确保滚动位置稳定，不会因为动态行高计算导致滚动跳动
 
     // 最终保护：确保 startRow 和 endRow 都在有效范围内
     startRow = Math.max(0, Math.min(startRow, this.rowCount - 1));
@@ -488,9 +525,9 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
         break;
       }
     }
-    
-    // 计算 offsetY（使用实际行高）
-    const offsetY = this.getRowOffsetFn ? this.getRowOffsetFn(startRow) : startRow * this.rowHeight;
+
+    // 计算 offsetY（使用内部行高缓存）
+    const offsetY = this.getRowOffset(startRow);
     
     const newState: VirtualScrollState = {
       startRow,

@@ -31,11 +31,7 @@
   border: 2px solid var(--ss-selection-border);
   box-sizing: border-box;
   pointer-events: none;
-  transition: 
-    top var(--ss-transition-fast),
-    left var(--ss-transition-fast),
-    width var(--ss-transition-fast),
-    height var(--ss-transition-fast);
+  /* 不使用 transition，避免位置变化时触发布局重新计算导致滚动跳动 */
 }
 
 /* 填充手柄 */

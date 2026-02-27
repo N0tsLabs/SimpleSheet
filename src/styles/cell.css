@@ -15,9 +15,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   background-color: transparent;
-  transition: 
-    background-color var(--ss-transition-fast),
-    box-shadow var(--ss-transition-fast);
+  /* 移除所有 transition，避免影响滚动行为 */
   cursor: cell;
   /* 关键修复：确保单元格高度一致，防止边框缺失 */
   min-height: 0;
@@ -40,7 +38,7 @@
   font-size: var(--ss-font-size-small);
   border-right: var(--ss-border-width) solid var(--ss-border-color);
   cursor: pointer;
-  transition: background-color var(--ss-transition-fast);
+  /* 移除所有 transition，避免影响滚动行为 */
 }
 
 .ss-row-number:hover {
