@@ -187,6 +187,8 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             getColumns: () => this.options.columns,
             setColumns: (columns) => {
                 this.options.columns = columns;
+                // 修复：同步更新 dataModel 中的列数组
+                this.dataModel.setColumns(columns);
                 this.renderer.updateOptions({ columns: this.options.columns });
                 this.renderer.render();
             },
