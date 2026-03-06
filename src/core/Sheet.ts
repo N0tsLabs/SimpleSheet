@@ -15,6 +15,12 @@ import { AutoFill } from "../plugins/AutoFill";
 import { RowReorder } from "../plugins/RowReorder";
 import { FilePasteHandler } from "../plugins/FilePasteHandler";
 import { ColumnResizer } from "../plugins/ColumnResizer";
+import { ColumnReorder } from "../plugins/ColumnReorder";
+import { Sorter } from "../plugins/Sorter";
+import { Filter } from "../plugins/Filter";
+import { Search } from "../plugins/Search";
+import { Validator } from "../plugins/Validator";
+import { ContextMenu, createDefaultMenuItems, createHeaderMenuItems, createRowNumberMenuItems } from "../plugins/ContextMenu";
 import type {
     FileUploader,
     SheetOptions,
@@ -26,9 +32,9 @@ import type {
     CellPosition,
     SelectionRange,
     SheetConfigSnapshot,
-    ConfigChangeType
+    ConfigChangeType,
+    ContextMenuOptions
 } from "../types";
-import { ColumnReorder } from "../plugins/ColumnReorder";
 import { addEvent, addEvents } from "../utils/dom";
 import { normalizeRange, deepClone } from "../utils/helpers";
 import { createElement, setStyles } from "../utils/dom";
@@ -62,6 +68,17 @@ const DEFAULT_OPTIONS: Required<Omit<SheetOptions, "columns" | "toastMessages" |
     rowHeights: new Map<number, number>(),
     enableContextMenu: true,
     contextMenuOptions: undefined,
+    features: {
+        columnReorder: true,
+        rowReorder: true,
+        columnResize: true,
+        autoFill: true,
+        sorter: true,
+        filter: true,
+        search: true,
+        validator: true,
+        filePaste: true,
+    },
 };
 
 export class Sheet extends EventEmitter<SheetEventMap> {
@@ -80,6 +97,14 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     private columnReorder: ColumnReorder;
     private filePasteHandler: FilePasteHandler;
     private columnResizer: ColumnResizer;
+    // 内置插件
+    private sorter!: Sorter;
+    private filter!: Filter;
+    private search!: Search;
+    private validator!: Validator;
+    private contextMenu: ContextMenu | null = null;
+    private headerContextMenu: ContextMenu | null = null;
+    private rowNumberContextMenu: ContextMenu | null = null;
 
     private cleanupFns: Array<() => void> = [];
     private isDestroyed = false;
@@ -223,8 +248,207 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             maxWidth: 500
         });
 
+        // 初始化内置插件（根据 features 配置）
+        this._initBuiltInPlugins();
+
         // 设置
         this.setup();
+    }
+
+    /**
+     * 初始化内置插件（根据 features 配置）
+     */
+    private _initBuiltInPlugins(): void {
+        const features = this.options.features;
+        const root = this.renderer.getRoot();
+
+        // 初始化排序插件
+        if (features.sorter !== false) {
+            this.sorter = new Sorter();
+            this.sorter.setColumns(this.options.columns);
+            this.sorter.setData(this.dataModel.getData());
+            this.sorter.on('sort:change', ({ data }) => {
+                this.dataModel.setData(data);
+                this.filter?.setData(data);
+                this.search?.setData(data, this.options.columns);
+                this.renderer.updateOptions({ rowCount: data.length || 1 });
+                this.renderer.render();
+                this.selectionManager.updateBounds(data.length || 1, this.options.columns.length);
+            });
+        }
+
+        // 初始化筛选插件
+        if (features.filter !== false) {
+            this.filter = new Filter();
+            this.filter.setColumns(this.options.columns);
+            this.filter.setData(this.dataModel.getData());
+            this.filter.on('filter:change', ({ data }) => {
+                this.dataModel.setData(data);
+                this.search?.setData(data, this.options.columns);
+                this.renderer.updateOptions({ rowCount: data.length || 1 });
+                this.renderer.render();
+                this.selectionManager.updateBounds(data.length || 1, this.options.columns.length);
+            });
+        }
+
+        // 初始化搜索插件
+        if (features.search !== false) {
+            this.search = new Search();
+            this.search.setData(this.dataModel.getData(), this.options.columns);
+            this.search.on('search:result', ({ results, currentIndex }) => {
+                // 搜索结果显示可以在外部监听处理
+            });
+        }
+
+        // 初始化验证插件
+        if (features.validator !== false) {
+            this.validator = new Validator();
+            this.validator.on('validation:error', ({ row, col, message }) => {
+                // 验证错误，可以更新 UI
+                this.renderer.render();
+            });
+        }
+
+        // 初始化右键菜单
+        if (this.options.enableContextMenu !== false) {
+            this._initContextMenu();
+        }
+    }
+
+    /**
+     * 初始化右键菜单
+     */
+    private _initContextMenu(): void {
+        const root = this.renderer.getRoot();
+        if (!root) return;
+
+        const menuOptions = this.options.contextMenuOptions;
+
+        // 单元格右键菜单
+        this.contextMenu = new ContextMenu({
+            items: createDefaultMenuItems({
+                onCopy: () => this.copy(),
+                onPaste: () => this.paste(),
+                onCut: () => this.cut(),
+                onClearContent: () => this.clearContent(),
+                onInsertRowAbove: (ctx) => {
+                    if (ctx.position) this.insertRow(ctx.position.row);
+                },
+                onInsertRowBelow: (ctx) => {
+                    if (ctx.position) this.insertRow(ctx.position.row + 1);
+                },
+                onDeleteRow: (ctx) => {
+                    if (ctx.position) this.deleteRow(ctx.position.row);
+                },
+                onInsertColumnLeft: (ctx) => {
+                    if (ctx.position) this.insertColumn(ctx.position.col, { key: '', title: '新列' });
+                },
+                onInsertColumnRight: (ctx) => {
+                    if (ctx.position) this.insertColumn(ctx.position.col + 1, { key: '', title: '新列' });
+                },
+                onDeleteColumn: (ctx) => {
+                    if (ctx.position) this.deleteColumn(ctx.position.col);
+                },
+            }),
+        });
+        this.contextMenu.mount(document.body);
+        this.setContextMenu(this.contextMenu);
+
+        // 表头右键菜单
+        this.headerContextMenu = new ContextMenu({
+            items: createHeaderMenuItems({
+                onCopy: () => this.copy(),
+                onSortAsc: (ctx) => {
+                    if (ctx.headerColIndex !== undefined) {
+                        const col = this.options.columns[ctx.headerColIndex];
+                        if (col && col.key) this.sorter?.sort(col.key, 'asc');
+                    }
+                },
+                onSortDesc: (ctx) => {
+                    if (ctx.headerColIndex !== undefined) {
+                        const col = this.options.columns[ctx.headerColIndex];
+                        if (col && col.key) this.sorter?.sort(col.key, 'desc');
+                    }
+                },
+                onInsertColumnLeft: (ctx) => {
+                    if (ctx.headerColIndex !== undefined) {
+                        this.insertColumn(ctx.headerColIndex, { key: '', title: '新列' });
+                    }
+                },
+                onInsertColumnRight: (ctx) => {
+                    if (ctx.headerColIndex !== undefined) {
+                        this.insertColumn(ctx.headerColIndex + 1, { key: '', title: '新列' });
+                    }
+                },
+                onDeleteColumn: (ctx) => {
+                    if (ctx.headerColIndex !== undefined) {
+                        this.deleteColumn(ctx.headerColIndex);
+                    }
+                },
+                onHideColumn: (ctx) => {
+                    if (ctx.headerColIndex !== undefined) {
+                        this.hideColumn(ctx.headerColIndex);
+                    }
+                },
+                onShowAllColumns: () => this.showAllColumns(),
+            }),
+        });
+        this.headerContextMenu.mount(document.body);
+
+        // 行号右键菜单
+        this.rowNumberContextMenu = new ContextMenu({
+            items: createRowNumberMenuItems({
+                onCopy: () => this.copy(),
+                onInsertRowAbove: (ctx) => {
+                    if (ctx.rowNumberIndex !== undefined) this.insertRow(ctx.rowNumberIndex);
+                },
+                onInsertRowBelow: (ctx) => {
+                    if (ctx.rowNumberIndex !== undefined) this.insertRow(ctx.rowNumberIndex + 1);
+                },
+                onDeleteRow: (ctx) => {
+                    if (ctx.rowNumberIndex !== undefined) this.deleteRow(ctx.rowNumberIndex);
+                },
+                onHideRow: (ctx) => {
+                    if (ctx.rowNumberIndex !== undefined) this.hideRow(ctx.rowNumberIndex);
+                },
+                onShowAllRows: () => this.showAllRows(),
+            }),
+        });
+        this.rowNumberContextMenu.mount(document.body);
+
+        // 绑定右键菜单事件
+        this.on('cell:contextmenu', (e) => {
+            const selection = this.getSelection() || [];
+            this.contextMenu?.show(e.originalEvent.clientX, e.originalEvent.clientY, {
+                position: { row: e.row, col: e.col },
+                selection,
+                selectedCells: selection.length > 0 ? [selection[0].start] : [],
+                originalEvent: e.originalEvent,
+                clickArea: 'cell',
+            });
+        });
+
+        this.on('header:contextmenu' as any, (e: any) => {
+            this.headerContextMenu?.show(e.originalEvent.clientX, e.originalEvent.clientY, {
+                position: null,
+                selection: this.getSelection() || [],
+                selectedCells: [],
+                originalEvent: e.originalEvent,
+                clickArea: 'header',
+                headerColIndex: e.col,
+            });
+        });
+
+        this.on('rowNumber:contextmenu' as any, (e: any) => {
+            this.rowNumberContextMenu?.show(e.originalEvent.clientX, e.originalEvent.clientY, {
+                position: null,
+                selection: this.getSelection() || [],
+                selectedCells: [],
+                originalEvent: e.originalEvent,
+                clickArea: 'rowNumber',
+                rowNumberIndex: e.row,
+            });
+        });
     }
 
     /**
@@ -2469,6 +2693,53 @@ export class Sheet extends EventEmitter<SheetEventMap> {
 
         values.push(current);
         return values;
+    }
+
+    /**
+     * 添加列验证规则
+     */
+    addValidationRule(columnKey: string, rule: { type: string; min?: number; max?: number; message?: string; pattern?: RegExp | string }): void {
+        if (!this.validator) return;
+        this.validator.addValidation(columnKey, [rule as any]);
+    }
+
+    /**
+     * 搜索
+     */
+    doSearch(keyword: string, options?: { caseSensitive?: boolean; wholeWord?: boolean; regex?: boolean }): any[] {
+        if (!this.search) return [];
+        const results = this.search.search(keyword, options);
+        return results;
+    }
+
+    /**
+     * 设置筛选（支持按列 key 和值列表筛选）
+     */
+    setFilter(columnKey: string, values: any[]): void {
+        if (!this.filter) return;
+        // 使用 inList 操作符创建筛选条件
+        this.filter.addCondition({
+            column: columnKey,
+            operator: 'inList',
+            value: values,
+        });
+    }
+
+    /**
+     * 清除筛选
+     */
+    clearFilter(): void {
+        if (!this.filter) return;
+        this.filter.clearFilter();
+    }
+
+    /**
+     * 按列 key 排序（公共方法）
+     */
+    sortByKey(columnKey: string, direction: 'asc' | 'desc' | null): void {
+        const colIndex = this.options.columns.findIndex(col => col.key === columnKey);
+        if (colIndex === -1) return;
+        this.sort(colIndex, direction);
     }
 
     /**

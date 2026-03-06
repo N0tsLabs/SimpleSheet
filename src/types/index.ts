@@ -403,6 +403,27 @@ export interface SheetOptions {
     /** 其他操作提示 */
     [key: string]: string | undefined;
   };
+  /** ===== 功能开关配置（默认全部开启） ===== */
+  features?: {
+    /** 启用列拖拽排序（默认 true） */
+    columnReorder?: boolean;
+    /** 启用行拖拽排序（默认 true） */
+    rowReorder?: boolean;
+    /** 启用列宽调整（默认 true） */
+    columnResize?: boolean;
+    /** 启用自动填充（默认 true） */
+    autoFill?: boolean;
+    /** 启用排序功能（默认 true） */
+    sorter?: boolean;
+    /** 启用筛选功能（默认 true） */
+    filter?: boolean;
+    /** 启用搜索功能（默认 true） */
+    search?: boolean;
+    /** 启用单元格验证（默认 true） */
+    validator?: boolean;
+    /** 启用文件粘贴处理（默认 true） */
+    filePaste?: boolean;
+  };
   // TODO: 冻结功能开发中
   // freeze?: {
   //   /** 冻结行数（从顶部，包括表头） */

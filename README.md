@@ -100,6 +100,19 @@ interface SheetOptions {
   allowInsertColumn?: boolean;  // 允许插入列（默认 true）
   allowDeleteColumn?: boolean; // 允许删除列（默认 true）
 
+  // ===== 功能开关配置 =====
+  features?: {                // 内置功能开关（所有功能默认开启）
+    columnReorder?: boolean;  // 列拖拽排序
+    rowReorder?: boolean;     // 行拖拽排序
+    columnResize?: boolean;   // 列宽调整
+    autoFill?: boolean;       // 自动填充
+    sorter?: boolean;         // 排序功能
+    filter?: boolean;         // 筛选功能
+    search?: boolean;         // 搜索功能
+    validator?: boolean;      // 数据验证
+    filePaste?: boolean;      // 文件粘贴处理
+  };
+
   // ===== 右键菜单配置 =====
   enableContextMenu?: boolean;                    // 启用右键菜单（默认 true）
   contextMenuOptions?: ContextMenuOptions;         // 右键菜单功能配置

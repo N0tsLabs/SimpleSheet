@@ -119,6 +119,30 @@ interface SheetOptions {
   /** 预计算的行高（用于 wrapText 模式） */
   rowHeights?: Map<number, number>;
 
+  /** ===== 功能开关配置 ===== */
+
+  /** 内置功能开关配置（所有功能默认开启） */
+  features?: {
+    /** 列拖拽排序（默认 true） */
+    columnReorder?: boolean;
+    /** 行拖拽排序（默认 true） */
+    rowReorder?: boolean;
+    /** 列宽调整（默认 true） */
+    columnResize?: boolean;
+    /** 自动填充（默认 true） */
+    autoFill?: boolean;
+    /** 排序功能（默认 true） */
+    sorter?: boolean;
+    /** 筛选功能（默认 true） */
+    filter?: boolean;
+    /** 搜索功能（默认 true） */
+    search?: boolean;
+    /** 数据验证（默认 true） */
+    validator?: boolean;
+    /** 文件粘贴处理（默认 true） */
+    filePaste?: boolean;
+  };
+
   /** ===== 右键菜单配置 ===== */
 
   /** 启用右键菜单（默认 true） */

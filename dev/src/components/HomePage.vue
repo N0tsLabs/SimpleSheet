@@ -1,42 +1,16 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue';
-import {
-  SimpleSheet,
-  ContextMenu,
-  createDefaultMenuItems,
-  createHeaderMenuItems,
-  createRowNumberMenuItems,
-  ColumnReorder,
-  Sorter,
-  Filter,
-  FilterConditions,
-  Search,
-  Validator,
-  ValidationRules,
-  showCreateColumnDialog,
-  showEditColumnDialog,
-} from '../../../src';
+import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { SimpleSheet } from '../../../src';
 import type { Column } from '../../../src';
 import '../../../src/styles/index.css';
 
-// 定义 emits
-const emit = defineEmits<{
-  (e: 'go-docs'): void;
-}>();
+const emit = defineEmits(['go-docs']);
 
 // 容器引用
 const sheetContainer = ref<HTMLElement | null>(null);
 
 // Sheet 实例
 let sheet: SimpleSheet | null = null;
-let contextMenu: ContextMenu | null = null;
-let headerMenu: ContextMenu | null = null;
-let rowNumberMenu: ContextMenu | null = null;
-let columnReorder: ColumnReorder | null = null;
-let sorter: Sorter | null = null;
-let filter: Filter | null = null;
-let search: Search | null = null;
-let validator: Validator | null = null;
 
 // 状态
 const currentTheme = ref<'light' | 'dark'>('light');
@@ -142,8 +116,8 @@ const generateData = () => {
   return data;
 };
 
-let originalData = generateData();
-let currentData = [...originalData];
+const originalData = generateData();
+const currentData = ref([...originalData]);
 
 // 日志
 const log = (msg: string) => {
@@ -163,9 +137,10 @@ const initSheet = async () => {
   await nextTick();
   if (!sheetContainer.value) return;
 
+  // 使用配置方式初始化表格，所有功能默认开启
   sheet = new SimpleSheet(sheetContainer.value, {
     columns: columns.value,
-    data: currentData,
+    data: currentData.value,
     rowHeight: 36,
     headerHeight: 40,
     theme: currentTheme.value,
@@ -175,254 +150,58 @@ const initSheet = async () => {
     allowInsertColumn: true,
     allowDeleteColumn: true,
     allowMultiSelect: true,
-  });
-
-  showStats.value = { total: currentData.length, filtered: currentData.length };
-
-  // 右键菜单
-  contextMenu = new ContextMenu({
-    items: createDefaultMenuItems({
-      onCopy: () => { sheet?.copy(); log('复制'); },
-      onPaste: () => { sheet?.paste(); log('粘贴'); },
-      onCut: () => { sheet?.cut(); log('剪切'); },
-      onClearContent: () => { sheet?.clearContent(); log('清除内容'); },
-      onInsertRowAbove: (ctx) => {
-        if (ctx.position) {
-          sheet?.insertRow(ctx.position.row);
-          log(`在第 ${ctx.position.row + 1} 行上方插入`);
-        }
-      },
-      onInsertRowBelow: (ctx) => {
-        if (ctx.position) {
-          sheet?.insertRow(ctx.position.row + 1);
-          log(`在第 ${ctx.position.row + 1} 行下方插入`);
-        }
-      },
-      onDeleteRow: (ctx) => {
-        if (ctx.position) {
-          sheet?.deleteRow(ctx.position.row);
-          log(`删除第 ${ctx.position.row + 1} 行`);
-        }
-      },
-      onInsertColumnLeft: (ctx) => {
-        if (ctx.position) {
-          showCreateColumnDialog((newCol: Column) => {
-            sheet?.insertColumn(ctx.position!.col, newCol);
-            log(`在列 ${ctx.position!.col + 1} 左侧插入: ${newCol.title}`);
-          });
-        }
-      },
-      onInsertColumnRight: (ctx) => {
-        if (ctx.position) {
-          showCreateColumnDialog((newCol: Column) => {
-            sheet?.insertColumn(ctx.position!.col + 1, newCol);
-            log(`在列 ${ctx.position!.col + 1} 右侧插入: ${newCol.title}`);
-          });
-        }
-      },
-      onDeleteColumn: (ctx) => {
-        if (ctx.position) {
-          sheet?.deleteColumn(ctx.position.col);
-          log(`删除列 ${ctx.position.col + 1}`);
-        }
-      },
-    }),
-  });
-  contextMenu.mount(document.body);
-  sheet.setContextMenu(contextMenu);
-
-  // 表头右键菜单
-  headerMenu = new ContextMenu({
-    items: createHeaderMenuItems({
-      onCopy: () => { sheet?.copy(); log('复制整列'); },
-      onSortAsc: (ctx) => {
-        if (ctx.headerColIndex !== undefined) {
-          const col = columns.value[ctx.headerColIndex];
-          if (col && col.key) {
-            sorter?.sort(col.key, 'asc');
-            log(`按 ${col.title} 升序排序`);
-          }
-        }
-      },
-      onSortDesc: (ctx) => {
-        if (ctx.headerColIndex !== undefined) {
-          const col = columns.value[ctx.headerColIndex];
-          if (col && col.key) {
-            sorter?.sort(col.key, 'desc');
-            log(`按 ${col.title} 降序排序`);
-          }
-        }
-      },
-      onInsertColumnLeft: (ctx) => {
-        if (ctx.headerColIndex !== undefined) {
-          showCreateColumnDialog((newCol: Column) => {
-            sheet?.insertColumn(ctx.headerColIndex!, newCol);
-            log(`在列 ${ctx.headerColIndex! + 1} 左侧插入: ${newCol.title}`);
-          });
-        }
-      },
-      onInsertColumnRight: (ctx) => {
-        if (ctx.headerColIndex !== undefined) {
-          showCreateColumnDialog((newCol: Column) => {
-            sheet?.insertColumn(ctx.headerColIndex! + 1, newCol);
-            log(`在列 ${ctx.headerColIndex! + 1} 右侧插入: ${newCol.title}`);
-          });
-        }
-      },
-      onEditColumn: (ctx) => {
-        if (ctx.headerColIndex !== undefined) {
-          const col = columns.value[ctx.headerColIndex];
-          if (col) {
-            showEditColumnDialog(col, (updatedCol: Column) => {
-              columns.value[ctx.headerColIndex!] = updatedCol;
-              sheet?.setColumns(columns.value);
-              log(`编辑列配置: ${updatedCol.title}`);
-            });
-          }
-        }
-      },
-      onDeleteColumn: (ctx) => {
-        if (ctx.headerColIndex !== undefined) {
-          sheet?.deleteColumn(ctx.headerColIndex);
-          log(`删除列 ${ctx.headerColIndex + 1}`);
-        }
-      },
-      onHideColumn: (ctx) => {
-        if (ctx.headerColIndex !== undefined) {
-          sheet?.hideColumn(ctx.headerColIndex);
-          log(`隐藏列 ${ctx.headerColIndex + 1}`);
-        }
-      },
-      onShowAllColumns: () => {
-        sheet?.showAllColumns();
-        log('显示所有隐藏列');
-      },
-    }),
-  });
-  headerMenu.mount(document.body);
-
-  // 行号右键菜单
-  rowNumberMenu = new ContextMenu({
-    items: createRowNumberMenuItems({
-      onCopy: () => { sheet?.copy(); log('复制整行'); },
-      onInsertRowAbove: (ctx) => {
-        if (ctx.rowNumberIndex !== undefined) {
-          sheet?.insertRow(ctx.rowNumberIndex);
-          log(`在第 ${ctx.rowNumberIndex + 1} 行上方插入`);
-        }
-      },
-      onInsertRowBelow: (ctx) => {
-        if (ctx.rowNumberIndex !== undefined) {
-          sheet?.insertRow(ctx.rowNumberIndex + 1);
-          log(`在第 ${ctx.rowNumberIndex + 1} 行下方插入`);
-        }
-      },
-      onDeleteRow: (ctx) => {
-        if (ctx.rowNumberIndex !== undefined) {
-          sheet?.deleteRow(ctx.rowNumberIndex);
-          log(`删除第 ${ctx.rowNumberIndex + 1} 行`);
-        }
-      },
-      onHideRow: (ctx) => {
-        if (ctx.rowNumberIndex !== undefined) {
-          sheet?.hideRow(ctx.rowNumberIndex);
-          log(`隐藏第 ${ctx.rowNumberIndex + 1} 行`);
-        }
-      },
-      onShowAllRows: () => {
-        sheet?.showAllRows();
-        log('显示所有隐藏行');
-      },
-    }),
-  });
-  rowNumberMenu.mount(document.body);
-
-  // 右键菜单事件
-  sheet.on('cell:contextmenu', (e) => {
-    const selection = sheet?.getSelection() || [];
-    contextMenu?.show(e.originalEvent.clientX, e.originalEvent.clientY, {
-      position: { row: e.row, col: e.col },
-      selection,
-      selectedCells: selection.length > 0 ? [selection[0].start] : [],
-      originalEvent: e.originalEvent,
-      clickArea: 'cell',
-    });
-  });
-
-  sheet.on('header:contextmenu' as any, (e: any) => {
-    headerMenu?.show(e.originalEvent.clientX, e.originalEvent.clientY, {
-      position: null,
-      selection: sheet?.getSelection() || [],
-      selectedCells: [],
-      originalEvent: e.originalEvent,
-      clickArea: 'header',
-      headerColIndex: e.col,
-    });
-  });
-
-  sheet.on('rowNumber:contextmenu' as any, (e: any) => {
-    rowNumberMenu?.show(e.originalEvent.clientX, e.originalEvent.clientY, {
-      position: null,
-      selection: sheet?.getSelection() || [],
-      selectedCells: [],
-      originalEvent: e.originalEvent,
-      clickArea: 'rowNumber',
-      rowNumberIndex: e.row,
-    });
-  });
-
-  // 列拖拽排序
-  columnReorder = new ColumnReorder({
-    getColumns: () => columns.value,
-    setColumns: (newCols: any[]) => {
-      columns.value = newCols;
-      sheet?.setColumns(newCols);
-      sorter?.setColumns(newCols);
-      filter?.setColumns(newCols);
+    // 所有功能默认开启，可以通过 features 配置关闭
+    features: {
+      columnReorder: true,    // 列拖拽排序
+      rowReorder: true,       // 行拖拽排序
+      columnResize: true,     // 列宽调整
+      autoFill: true,         // 自动填充
+      sorter: true,           // 排序
+      filter: true,           // 筛选
+      search: true,           // 搜索
+      validator: true,        // 验证
+      filePaste: true,        // 文件粘贴
     },
-    getColumnWidth: (i) => columns.value[i]?.width || 100,
-    getHeaderHeight: () => 40,
-    showRowNumber: true,
-    rowNumberWidth: 50,
-    clearSelection: () => {
-      sheet?.clearSelection();
+    // 右键菜单配置
+    contextMenuOptions: {
+      // 基础操作
+      showCopy: true,
+      showPaste: true,
+      showCut: true,
+      showSelectAll: true,
+      // 行操作
+      showInsertRowAbove: true,
+      showInsertRowBelow: true,
+      showDeleteRow: true,
+      showClearRow: true,
+      // 列操作
+      showInsertColumnLeft: true,
+      showInsertColumnRight: true,
+      showDeleteColumn: true,
+      showClearColumn: true,
+      // 排序和筛选
+      showSortAsc: true,
+      showSortDesc: true,
+      showSortCancel: true,
+      showFilter: true,
+      // 单元格操作
+      showMergeCell: true,
+      showUnmergeCell: true,
     },
   });
-  columnReorder.mount(sheetContainer.value);
 
-  // 排序
-  sorter = new Sorter();
-  sorter.setColumns(columns.value);
-  sorter.setData(currentData);
-  sorter.on('sort:change', ({ data }) => {
-    currentData = data;
-    sheet?.setData(data);
-    filter?.setData(data);
-    search?.setData(data, columns.value);
-  });
+  // 更新统计
+  showStats.value = { total: currentData.value.length, filtered: currentData.value.length };
 
-  // 筛选
-  filter = new Filter();
-  filter.setColumns(columns.value);
-  filter.setData(currentData);
-  filter.on('filter:change', ({ data }) => {
-    sheet?.setData(data);
-    showStats.value.filtered = data.length;
-    search?.setData(data, columns.value);
-  });
-
-  // 搜索
-  search = new Search();
-  search.setData(currentData, columns.value);
-
-  // 验证
-  validator = new Validator();
-  validator.addRule('email', ValidationRules.email());
-  validator.addRule('age', ValidationRules.range(18, 65));
-  validator.addRule('performance', ValidationRules.range(0, 5));
+  // 添加验证规则
+  sheet.addValidationRule('email', { type: 'email', message: '请输入有效的邮箱地址' });
+  sheet.addValidationRule('age', { type: 'range', min: 18, max: 65, message: '年龄必须在 18-65 之间' });
+  sheet.addValidationRule('performance', { type: 'range', min: 0, max: 5, message: '绩效必须在 0-5 之间' });
 
   // 事件监听
-  sheet.on('cell:click', () => {});
+  sheet.on('cell:click', (e) => {
+    log(`点击单元格：行${e.row + 1}, 列${e.col + 1}`);
+  });
   sheet.on('edit:end', () => {});
   sheet.on('selection:change', () => {});
   sheet.on('copy', () => log('已复制'));
@@ -452,17 +231,19 @@ const initSheet = async () => {
     switch (e.type) {
       case 'sort':
         const col = e.detail.column;
-        const colName = columns.value[col]?.title || `列${col + 1}`;
+        const colName = col !== undefined && columns.value[col] ? columns.value[col].title : `列${(col ?? 0) + 1}`;
         const direction = e.detail.direction === 'asc' ? '升序' : (e.detail.direction === 'desc' ? '降序' : '取消');
-        detail = `列: ${colName}, 方式: ${direction}`;
+        detail = `列：${colName}, 方式：${direction}`;
         break;
       case 'column-resize':
         const resizeCol = e.detail.column;
-        const resizeColName = columns.value[resizeCol]?.title || `列${resizeCol + 1}`;
-        detail = `列: ${resizeColName}, ${e.detail.oldWidth}px → ${e.detail.newWidth}px`;
+        const resizeColName = resizeCol !== undefined && columns.value[resizeCol] ? columns.value[resizeCol].title : `列${(resizeCol ?? 0) + 1}`;
+        detail = `列：${resizeColName}, ${e.detail.oldWidth}px → ${e.detail.newWidth}px`;
         break;
       case 'column-reorder':
-        detail = `${e.detail.fromIndex + 1} → ${e.detail.toIndex + 1}`;
+        const fromIndex = e.detail.fromIndex ?? 0;
+        const toIndex = e.detail.toIndex ?? 0;
+        detail = `${fromIndex + 1} → ${toIndex + 1}`;
         break;
     }
 
@@ -473,10 +254,6 @@ const initSheet = async () => {
 };
 
 const destroySheet = () => {
-  contextMenu?.destroy();
-  headerMenu?.destroy();
-  rowNumberMenu?.destroy();
-  columnReorder?.unmount();
   sheet?.destroy();
   sheet = null;
 };
@@ -487,35 +264,82 @@ const toggleTheme = () => {
   sheet?.setTheme(currentTheme.value);
 };
 
-// 搜索
+// 搜索 - 使用筛选功能过滤数据
 const doSearch = () => {
-  if (!search || !searchKeyword.value) {
+  if (!searchKeyword.value) {
     searchResults.value = [];
     currentSearchIndex.value = -1;
+    // 清除筛选，恢复部门筛选状态
+    if (filterDepartment.value) {
+      applyFilter();
+    } else {
+      sheet?.clearFilter();
+    }
+    showStats.value.filtered = currentData.value.length;
     return;
   }
-  const results = search.search(searchKeyword.value, { caseSensitive: false });
+  // 使用内置搜索功能获取结果
+  const results = sheet?.doSearch(searchKeyword.value, { caseSensitive: false }) || [];
   searchResults.value = results;
   currentSearchIndex.value = results.length > 0 ? 0 : -1;
-  if (results.length > 0) sheet?.scrollToCell(results[0].row, results[0].col);
-  log(`搜索 "${searchKeyword.value}": ${results.length} 个结果`);
+  
+  // 获取所有包含搜索关键词的行号（去重）
+  const matchingRowIndices = new Set<number>();
+  for (const result of results) {
+    matchingRowIndices.add(result.row);
+  }
+  
+  // 如果选择了部门筛选，需要同时满足部门和搜索条件
+  let finalRowIndices: number[] = [];
+  if (filterDepartment.value) {
+    const deptValue = deptValueMap[filterDepartment.value] || filterDepartment.value;
+    // 先获取符合部门条件的行
+    const deptRowIndices = new Set<number>();
+    currentData.value.forEach((row, index) => {
+      if (row.department === deptValue) {
+        deptRowIndices.add(index);
+      }
+    });
+    // 取交集
+    matchingRowIndices.forEach(idx => {
+      if (deptRowIndices.has(idx)) {
+        finalRowIndices.push(idx);
+      }
+    });
+  } else {
+    finalRowIndices = Array.from(matchingRowIndices);
+  }
+  
+  // 获取匹配行的 ID 列表
+  const matchingRowKeys = finalRowIndices.map(idx => currentData.value[idx]?.id).filter(id => id !== undefined);
+  
+  // 使用筛选功能只显示匹配的行
+  if (matchingRowKeys.length > 0) {
+    sheet?.setFilter('id', matchingRowKeys);
+  } else {
+    sheet?.clearFilter();
+  }
+  
+  showStats.value.filtered = matchingRowKeys.length;
+  log(`搜索 "${searchKeyword.value}": ${results.length} 个结果，显示 ${matchingRowKeys.length} 行`);
 };
 
 const searchNext = () => {
   if (searchResults.value.length === 0) return;
-  const result = search?.next();
-  if (result) {
-    currentSearchIndex.value = search!.getCurrentIndex();
-    sheet?.scrollToCell(result.row, result.col);
+  // 简单实现：循环高亮搜索结果
+  currentSearchIndex.value = (currentSearchIndex.value + 1) % searchResults.value.length;
+  const result = searchResults.value[currentSearchIndex.value];
+  if (result && sheet) {
+    sheet.scrollToCell(result.row, result.col, true, true);
   }
 };
 
 const searchPrev = () => {
   if (searchResults.value.length === 0) return;
-  const result = search?.prev();
-  if (result) {
-    currentSearchIndex.value = search!.getCurrentIndex();
-    sheet?.scrollToCell(result.row, result.col);
+  currentSearchIndex.value = currentSearchIndex.value <= 0 ? searchResults.value.length - 1 : currentSearchIndex.value - 1;
+  const result = searchResults.value[currentSearchIndex.value];
+  if (result && sheet) {
+    sheet.scrollToCell(result.row, result.col, true, true);
   }
 };
 
@@ -523,7 +347,9 @@ const clearSearch = () => {
   searchKeyword.value = '';
   searchResults.value = [];
   currentSearchIndex.value = -1;
-  search?.clear();
+  // 清除筛选
+  sheet?.clearFilter();
+  showStats.value.filtered = currentData.value.length;
 };
 
 // 筛选
@@ -534,38 +360,45 @@ const deptValueMap: Record<string, string> = {
 const applyFilter = () => {
   if (filterDepartment.value) {
     const deptValue = deptValueMap[filterDepartment.value] || filterDepartment.value;
-    filter?.setConditions([FilterConditions.equals('department', deptValue)]);
+    sheet?.setFilter('department', [deptValue]);
   } else {
-    filter?.clearFilter();
+    sheet?.clearFilter();
   }
 };
 
 // 排序
 const doSort = (colKey: string, dir: 'asc' | 'desc') => {
-  sorter?.sort(colKey, dir);
+  sheet?.sortByKey(colKey, dir);
 };
 
 const clearSort = () => {
-  sorter?.clear();
-  sheet?.setData(originalData);
-  currentData = [...originalData];
-  filter?.setData(currentData);
-  search?.setData(currentData, columns.value);
-  showStats.value.filtered = currentData.length;
+  sheet?.sortByKey('', null);
+  currentData.value = [...originalData];
+  sheet?.setData(currentData.value);
+  showStats.value.filtered = currentData.value.length;
   log('清除排序');
 };
 
 // 验证
 const validateAll = () => {
-  if (!validator || !sheet) return;
+  if (!sheet) return;
   sheet.clearAllValidationErrors();
   const data = sheet.getData();
-  const result = validator.validateAll(data, columns.value);
-  if (result.valid) {
+  // 简单验证示例
+  const errors: { row: number; col: number; message: string }[] = [];
+  data.forEach((row: any, rowIndex: number) => {
+    if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
+      errors.push({ row: rowIndex, col: columns.value.findIndex(c => c.key === 'email'), message: '邮箱格式不正确' });
+    }
+    if (row.age && (row.age < 18 || row.age > 65)) {
+      errors.push({ row: rowIndex, col: columns.value.findIndex(c => c.key === 'age'), message: '年龄必须在 18-65 之间' });
+    }
+  });
+  if (errors.length === 0) {
     log('✅ 数据验证通过');
   } else {
-    log(`❌ 验证失败: ${result.errors.length} 个错误`);
-    result.errors.forEach((err: any) => {
+    log(`❌ 验证失败：${errors.length} 个错误`);
+    errors.forEach((err) => {
       sheet!.setValidationError(err.row, err.col, err.message);
     });
   }
@@ -626,231 +459,51 @@ const sheet = new SimpleSheet('#container', {
 });`;
 
 const demoSourceCode = `<script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
-import {
-  SimpleSheet,
-  ContextMenu,
-  createDefaultMenuItems,
-  createHeaderMenuItems,
-  createRowNumberMenuItems,
-  ColumnReorder,
-  Sorter,
-  Filter,
-  FilterConditions,
-  Search,
-  Validator,
-  ValidationRules,
-} from '@n0ts123/simple-sheet';
-import type { Column } from '@n0ts123/simple-sheet';
+import { ref, onMounted } from 'vue';
+import { SimpleSheet } from '@n0ts123/simple-sheet';
 import '@n0ts123/simple-sheet/dist/simple-sheet.css';
 
 const sheetContainer = ref<HTMLElement | null>(null);
 let sheet: SimpleSheet | null = null;
-let contextMenu: ContextMenu | null = null;
-let headerMenu: ContextMenu | null = null;
-let rowNumberMenu: ContextMenu | null = null;
-let columnReorder: ColumnReorder | null = null;
-let sorter: Sorter | null = null;
-let filter: Filter | null = null;
-let search: Search | null = null;
-let validator: Validator | null = null;
 
-// 列定义
-const columns = ref<Column[]>([
+const columns = [
   { key: 'id', title: 'ID', width: 60, type: 'number', readonly: true, sortable: true },
-  { key: 'avatar', title: '头像', width: 80, type: 'file' },
   { key: 'name', title: '姓名', width: 100, sortable: true },
-  { key: 'department', title: '部门', width: 110, type: 'select', options: departmentOptions, sortable: true },
-  { key: 'status', title: '状态', width: 100, type: 'select', options: statusOptions },
   { key: 'email', title: '邮箱', width: 180, type: 'email' },
-  { key: 'phone', title: '电话', width: 130, type: 'phone' },
-  { key: 'age', title: '年龄', width: 80, type: 'number', sortable: true },
-  { key: 'salary', title: '薪资', width: 120, type: 'number', numberPrefix: '¥', useThousandSeparator: true },
-  { key: 'performance', title: '绩效', width: 80, type: 'number', decimalPlaces: 1, sortable: true },
-  { key: 'isFullTime', title: '全职', width: 70, type: 'boolean' },
-  { key: 'joinDate', title: '入职日期', width: 120, type: 'date', dateFormat: 'YYYY-MM-DD' },
-  { key: 'website', title: '个人主页', width: 160, type: 'link' },
-  { key: 'tags', title: '标签', width: 180, type: 'select', options: tagOptions, multiple: true },
-  { key: 'remark', title: '备注', width: 200, wrapText: 'ellipsis' },
-]);
-
-const departmentOptions = [
-  { label: '技术部', value: 'tech', color: '#e3f2fd', textColor: '#1565c0' },
-  { label: '产品部', value: 'product', color: '#e8f5e9', textColor: '#2e7d32' },
-  { label: '设计部', value: 'design', color: '#fce4ec', textColor: '#c2185b' },
 ];
 
-const statusOptions = [
-  { label: '在职', value: 'active', color: '#c8e6c9', textColor: '#2e7d32' },
-  { label: '试用期', value: 'probation', color: '#fff9c4', textColor: '#f9a825' },
-  { label: '离职', value: 'resigned', color: '#ffcdd2', textColor: '#c62828' },
+const data = [
+  { id: 1, name: '张三', email: 'zhangsan@example.com' },
+  { id: 2, name: '李四', email: 'lisi@example.com' },
 ];
 
-const tagOptions = [
-  { label: '核心成员', value: 'core', color: '#ff5722', textColor: '#ffffff' },
-  { label: '技术骨干', value: 'tech_lead', color: '#2196f3', textColor: '#ffffff' },
-  { label: '新人', value: 'newcomer', color: '#4caf50', textColor: '#ffffff' },
-];
-
-// 生成测试数据
-const generateData = () => {
-  const names = ['张伟', '李娜', '王芳', '刘洋', '陈明'];
-  const data = [];
-  for (let i = 0; i < 100; i++) {
-    data.push({
-      id: i + 1,
-      name: names[i % names.length],
-      department: ['tech', 'product', 'design'][i % 3],
-      status: ['active', 'probation', 'resigned'][i % 3],
-      email: \`user\${i + 1}@example.com\`,
-      phone: \`138\${String(10000000 + Math.floor(Math.random() * 90000000)).slice(0, 8)}\`,
-      age: 22 + Math.floor(Math.random() * 30),
-      salary: Math.floor(8000 + Math.random() * 42000),
-      performance: Number((3 + Math.random() * 2).toFixed(1)),
-      isFullTime: Math.random() > 0.2,
-      joinDate: \`202\${Math.floor(Math.random() * 4)}-01-15\`,
-      website: i % 3 === 0 ? \`https://github.com/user\${i + 1}\` : '',
-      tags: ['core'],
-      remark: '表现优秀',
-    });
-  }
-  return data;
-};
-
-const currentData = generateData();
-
-// 初始化表格
-const initSheet = async () => {
-  if (!sheetContainer.value) return;
-
-  sheet = new SimpleSheet(sheetContainer.value, {
-    columns: columns.value,
-    data: currentData,
+onMounted(() => {
+  sheet = new SimpleSheet(sheetContainer.value!, {
+    columns,
+    data,
     rowHeight: 36,
     headerHeight: 40,
     theme: 'light',
     showRowNumber: true,
-    allowInsertRow: true,
-    allowDeleteRow: true,
-    allowInsertColumn: true,
-    allowDeleteColumn: true,
-    allowMultiSelect: true,
+    features: {
+      sorter: true,
+      filter: true,
+      search: true,
+      validator: true,
+    },
   });
-
-  // 右键菜单
-  contextMenu = new ContextMenu({
-    items: createDefaultMenuItems({
-      onCopy: () => { sheet?.copy(); },
-      onPaste: () => { sheet?.paste(); },
-      onClearContent: () => { sheet?.clearContent(); },
-    }),
-  });
-  contextMenu.mount(document.body);
-  sheet.setContextMenu(contextMenu);
-
-  // 列拖拽排序
-  columnReorder = new ColumnReorder({
-    getColumns: () => columns.value,
-    setColumns: (newCols) => { columns.value = newCols; sheet?.setColumns(newCols); },
-    getColumnWidth: (i) => columns.value[i]?.width || 100,
-    getHeaderHeight: () => 40,
-    showRowNumber: true,
-    rowNumberWidth: 50,
-    clearSelection: () => { sheet?.clearSelection(); },
-  });
-  columnReorder.mount(sheetContainer.value);
-
-  // 排序
-  sorter = new Sorter();
-  sorter.setColumns(columns.value);
-  sorter.setData(currentData);
-  sorter.on('sort:change', ({ data }) => { sheet?.setData(data); });
-
-  // 筛选
-  filter = new Filter();
-  filter.setColumns(columns.value);
-  filter.setData(currentData);
-
-  // 搜索
-  search = new Search();
-  search.setData(currentData, columns.value);
-
-  // 验证
-  validator = new Validator();
-  validator.addRule('email', ValidationRules.email());
-  validator.addRule('age', ValidationRules.range(18, 65));
-
-  log('表格初始化完成');
-};
-
-const destroySheet = () => {
-  contextMenu?.destroy();
-  columnReorder?.unmount();
-  sheet?.destroy();
-  sheet = null;
-};
-
-// 搜索
-const doSearch = (keyword: string) => {
-  const results = search?.search(keyword, { caseSensitive: false }) || [];
-  if (results.length > 0) sheet?.scrollToCell(results[0].row, results[0].col);
-};
-
-// 筛选
-const applyFilter = (dept: string) => {
-  if (dept) {
-    filter?.setConditions([FilterConditions.equals('department', dept)]);
-  } else {
-    filter?.clearFilter();
-  }
-};
-
-// 排序
-const doSort = (colKey: string, dir: 'asc' | 'desc') => {
-  sorter?.sort(colKey, dir);
-};
-
-// 验证
-const validateAll = () => {
-  const data = sheet?.getData() || [];
-  const result = validator?.validateAll(data, columns.value);
-  if (result?.valid) {
-    console.log('验证通过');
-  }
-};
-
-// 导出
-const exportCSV = () => {
-  const csv = sheet?.exportCSV();
-  if (csv) { console.log('CSV导出成功'); }
-};
-
-const exportJSON = () => {
-  const data = sheet?.getData();
-  if (data) { console.log('JSON导出成功'); }
-};
-
-// 主题切换
-const toggleTheme = () => {
-  const theme = sheet?.getTheme() === 'light' ? 'dark' : 'light';
-  sheet?.setTheme(theme);
-};
-
-onMounted(() => { initSheet(); });
-onUnmounted(() => { destroySheet(); });
-<\/script>
+});
+<` + `/script>
 
 <template>
-  <div class="demo-container">
-    <div ref="sheetContainer" class="sheet-container"></div>
-  </div>
-<\/template>
+  <div ref="sheetContainer" class="sheet-container"></div>
+</template>
 
 <style>
 .sheet-container {
   height: 500px;
 }
-<\/style>`;
+</style>`;
 
 const copyDemoCode = async () => {
   try {
@@ -864,11 +517,11 @@ const copyDemoCode = async () => {
 
 // 特性列表
 const features = [
-  { icon: '🚀', title: '虚拟滚动', desc: '轻松处理10万+数据' },
+  { icon: '🚀', title: '虚拟滚动', desc: '轻松处理 10 万 + 数据' },
   { icon: '📝', title: '多种类型', desc: '文本/数字/日期/下拉/复选等' },
   { icon: '🎨', title: '主题切换', desc: '亮色/暗色主题' },
   { icon: '⌨️', title: '快捷键', desc: '完整键盘操作' },
-  { icon: '📋', title: '复制粘贴', desc: '与Excel互通' },
+  { icon: '📋', title: '复制粘贴', desc: '与 Excel 互通' },
   { icon: '✅', title: '数据验证', desc: '可视化错误提示' },
   { icon: '🔍', title: '搜索筛选', desc: '强大搜索筛选功能' },
   { icon: '📊', title: '条件格式', desc: '数据条/色阶/自定义' },
@@ -1021,8 +674,8 @@ onUnmounted(() => {
 
         <div class="toolbar-group">
           <button class="btn" @click="validateAll">验证数据</button>
-          <button class="btn" @click="exportCSV">导出CSV</button>
-          <button class="btn" @click="exportJSON">导出JSON</button>
+          <button class="btn" @click="exportCSV">导出 CSV</button>
+          <button class="btn" @click="exportJSON">导出 JSON</button>
         </div>
 
         <div class="toolbar-group">
@@ -1057,7 +710,7 @@ onUnmounted(() => {
       </div>
 
       <div class="demo-tips">
-        💡 提示：双击编辑 · Alt+Enter换行 · 右键菜单 · 拖拽排序图标排序 · Ctrl+C/V复制粘贴 · Ctrl+Z/Y撤销重做
+        💡 提示：双击编辑 · Alt+Enter 换行 · 右键菜单 · 拖拽排序图标排序 · Ctrl+C/V 复制粘贴 · Ctrl+Z/Y 撤销重做
       </div>
 
       <!-- 查看源码 -->
