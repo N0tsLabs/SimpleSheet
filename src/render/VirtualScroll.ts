@@ -29,6 +29,8 @@ interface VirtualScrollOptions {
   showRowNumber?: boolean;
   /** 获取实际总高度的回调函数（用于动态行高） */
   getTotalHeight?: () => number;
+  /** 列隐藏检查函数 */
+  isColumnHidden?: (col: number) => boolean;
 }
 
 export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
@@ -44,6 +46,7 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
   private rowNumberWidth: number;
   private showRowNumber: boolean;
   private getTotalHeightFn?: () => number;
+  private isColumnHiddenFn?: (col: number) => boolean;
 
   /** 内部行高缓存（支持动态行高） */
   private rowHeights: Map<number, number> = new Map();
@@ -80,6 +83,7 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
     this.rowNumberWidth = options.rowNumberWidth ?? 50;
     this.showRowNumber = options.showRowNumber ?? true;
     this.getTotalHeightFn = options.getTotalHeight;
+    this.isColumnHiddenFn = options.isColumnHidden;
   }
 
   /**
@@ -509,6 +513,10 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
     let endCol = this.columns.length - 1;
     
     for (let i = 0; i < this.columns.length; i++) {
+      // 跳过隐藏列
+      if (this.isColumnHiddenFn && this.isColumnHiddenFn(i)) {
+        continue;
+      }
       const colWidth = this.columns[i]?.width ?? 100;
       if (colOffset + colWidth > scrollLeft) {
         startCol = Math.max(0, i - this.buffer);
@@ -519,6 +527,10 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
     
     colOffset = this.showRowNumber ? this.rowNumberWidth : 0;
     for (let i = 0; i < this.columns.length; i++) {
+      // 跳过隐藏列
+      if (this.isColumnHiddenFn && this.isColumnHiddenFn(i)) {
+        continue;
+      }
       colOffset += this.columns[i]?.width ?? 100;
       if (colOffset > scrollLeft + viewportWidth) {
         endCol = Math.min(this.columns.length - 1, i + this.buffer);

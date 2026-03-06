@@ -64,6 +64,12 @@ export class Renderer {
   private getRowDataFn: ((row: number) => RowData) | null = null;
   private getCellMetaFn: ((row: number, col: number) => CellMeta | undefined) | null = null;
   
+  /** 列隐藏检查函数 */
+  private isColumnHiddenFn: ((col: number) => boolean) | null = null;
+  
+  /** 可见列索引数组（用于隐藏列功能） */
+  private visibleColIndices: number[] | null = null;
+  
   /** 单元格值变化回调（用于复选框等直接点击修改的场景） */
   private onCellChangeFn: ((row: number, col: number, value: any) => void) | null = null;
   
@@ -201,6 +207,44 @@ export class Renderer {
 
     // 空闲时分批计算剩余行（首屏渲染后会在 handleVirtualScrollChange 中修正）
     this.continuePrecalculateOnIdle();
+  }
+
+  /**
+   * 设置列隐藏检查函数
+   */
+  setColumnHiddenFn(isColumnHidden: (col: number) => boolean): void {
+    this.isColumnHiddenFn = isColumnHidden;
+    this.updateVisibleColIndices();
+    // 同时更新 VirtualScroll 的列隐藏函数
+    (this.virtualScroll as any).isColumnHiddenFn = isColumnHidden;
+  }
+  
+  /**
+   * 更新可见列索引数组
+   */
+  public updateVisibleColIndices(): void {
+    if (!this.isColumnHiddenFn) {
+      this.visibleColIndices = null;
+      return;
+    }
+    
+    this.visibleColIndices = [];
+    for (let i = 0; i < this.options.columns.length; i++) {
+      if (!this.isColumnHiddenFn(i)) {
+        this.visibleColIndices.push(i);
+      }
+    }
+  }
+  
+  /**
+   * 获取可见列索引数组
+   */
+  getVisibleColIndices(): number[] {
+    if (!this.visibleColIndices) {
+      // 如果没有隐藏列，返回所有列索引
+      return Array.from({ length: this.options.columns.length }, (_, i) => i);
+    }
+    return this.visibleColIndices;
   }
 
   /**
@@ -614,7 +658,7 @@ export class Renderer {
   /**
    * 渲染表头
    */
-  private renderHeader(): void {
+  public renderHeader(): void {
     if (!this.headerRow) return;
     
     this.headerRow.innerHTML = '';
@@ -631,13 +675,10 @@ export class Renderer {
     
     // 列标题
     this.options.columns.forEach((col, index) => {
-      // 检查列是否隐藏（通过检查 getDataFn 返回 undefined）
-      if (this.getDataFn) {
-        const testValue = this.getDataFn(0, index);
-        if (testValue === undefined && this.getRowDataFn && Object.keys(this.getRowDataFn(0)).length === 0) {
-          // 列被隐藏，不渲染
-          return;
-        }
+      // 检查列是否隐藏
+      if (this.isColumnHiddenFn && this.isColumnHiddenFn(index)) {
+        // 列被隐藏，不渲染
+        return;
       }
       
       const cell = createElement('div', 'ss-header-cell');
@@ -982,15 +1023,10 @@ export class Renderer {
         continue;
       }
       
-      // 检查列是否隐藏（只有在明确返回 undefined 且 rowData 为空时才跳过）
-      if (this.getDataFn) {
-        const testValue = this.getDataFn(rowIndex, colIndex);
-        // 注意：即使 testValue 是 undefined，如果 rowData 不为空，也应该渲染
-        // 因为某些列可能确实没有值，但不应该被隐藏
-        if (testValue === undefined && Object.keys(rowData).length === 0) {
-          // 列被隐藏，跳过
-          continue;
-        }
+      // 检查列是否隐藏
+      if (this.isColumnHiddenFn && this.isColumnHiddenFn(colIndex)) {
+        // 列被隐藏，跳过
+        continue;
       }
       
       const cellKey = `${rowIndex}:${colIndex}`;
@@ -1108,6 +1144,16 @@ export class Renderer {
     const cells = row.querySelectorAll('.ss-cell:not(.ss-row-number)');
     cells.forEach(cell => {
       const colIndex = parseInt((cell as HTMLElement).dataset.col || '-1', 10);
+      
+      // 检查列是否隐藏
+      if (this.isColumnHiddenFn && this.isColumnHiddenFn(colIndex)) {
+        // 列被隐藏，移除单元格
+        const cellKey = `${rowIndex}:${colIndex}`;
+        this.cellCache.delete(cellKey);
+        cell.remove();
+        return;
+      }
+      
       if (colIndex < state.startCol || colIndex > state.endCol) {
         // 在移除之前，确保单元格有正确的高度（防止边框缺失）
         setStyles(cell as HTMLElement, {
@@ -1350,15 +1396,48 @@ export class Renderer {
     this.renderSelectionBorder(selectedCells, activeCell);
   }
 
+  /**
+   * 清除指定列的选择高亮
+   */
+  clearColumnSelection(colIndex: number): void {
+    // 清除该列所有单元格的选中样式
+    for (const [cellKey, cell] of this.cellCache.entries()) {
+      const col = parseInt(cellKey.split(':')[1], 10);
+      if (col === colIndex) {
+        cell.classList.remove('ss-cell-selected', 'ss-cell-active');
+        this.selectedCells.delete(cellKey);
+      }
+    }
+    
+    // 如果活动单元格是该列，清除活动状态
+    if (this.activeCell?.col === colIndex) {
+      this.activeCell = null;
+    }
+    
+    // 更新选区边框
+    this.renderSelectionBorder(
+      Array.from(this.selectedCells).map(key => {
+        const [row, col] = key.split(':').map(Number);
+        return { row, col };
+      }),
+      this.activeCell
+    );
+  }
+
   /** 选区框元素缓存 */
   private selectionBox: HTMLElement | null = null;
 
   /**
    * 计算列偏移量（直接使用 this.options.columns，确保与渲染数据一致）
+   * 跳过隐藏列的宽度计算
    */
   private getColumnOffsetDirect(colIndex: number): number {
     let offset = this.options.showRowNumber ? this.options.rowNumberWidth : 0;
     for (let i = 0; i < colIndex; i++) {
+      // 跳过隐藏列的宽度计算
+      if (this.isColumnHiddenFn && this.isColumnHiddenFn(i)) {
+        continue;
+      }
       offset += this.options.columns[i]?.width ?? 100;
     }
     return offset;

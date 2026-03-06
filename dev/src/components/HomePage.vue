@@ -209,6 +209,23 @@ const initSheet = async () => {
   sheet.on('row:insert', () => {});
   sheet.on('row:delete', () => {});
 
+  // 列隐藏/显示事件
+  sheet.on('column:hide', (e) => {
+    const colName = columns.value[e.index]?.title || `列${e.index + 1}`;
+    log(`🙈 隐藏列：${colName}`);
+  });
+  sheet.on('column:show', (e) => {
+    const colName = columns.value[e.index]?.title || `列${e.index + 1}`;
+    log(`👁️ 显示列：${colName}`);
+  });
+
+  // 排序事件
+  sheet.on('sort:change', (e) => {
+    const colName = columns.value[e.column]?.title || `列${e.column + 1}`;
+    const direction = e.direction === 'asc' ? '升序' : (e.direction === 'desc' ? '降序' : '取消');
+    log(`🔃 排序：${colName} - ${direction}`);
+  });
+
   // 配置变更事件
   sheet.on('config:change', (e) => {
     const typeLabels: Record<string, string> = {
@@ -217,6 +234,8 @@ const initSheet = async () => {
       'column-reorder': '列顺序调整',
       'column-insert': '插入列',
       'column-delete': '删除列',
+      'column-hide': '隐藏列',
+      'column-show': '显示列',
       'row-reorder': '行顺序调整',
       'row-insert': '插入行',
       'row-delete': '删除行',
@@ -244,6 +263,12 @@ const initSheet = async () => {
         const fromIndex = e.detail.fromIndex ?? 0;
         const toIndex = e.detail.toIndex ?? 0;
         detail = `${fromIndex + 1} → ${toIndex + 1}`;
+        break;
+      case 'column-hide':
+      case 'column-show':
+        const hideColIndex = e.detail.index;
+        const hideColName = hideColIndex !== undefined && columns.value[hideColIndex] ? columns.value[hideColIndex].title : `列${(hideColIndex ?? 0) + 1}`;
+        detail = `列：${hideColName}`;
         break;
     }
 

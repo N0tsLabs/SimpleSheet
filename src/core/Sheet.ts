@@ -360,14 +360,26 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                 onCopy: () => this.copy(),
                 onSortAsc: (ctx) => {
                     if (ctx.headerColIndex !== undefined) {
-                        const col = this.options.columns[ctx.headerColIndex];
-                        if (col && col.key) this.sorter?.sort(col.key, 'asc');
+                        this.handleHeaderSort(ctx.headerColIndex, this.options.columns[ctx.headerColIndex]);
                     }
                 },
                 onSortDesc: (ctx) => {
                     if (ctx.headerColIndex !== undefined) {
-                        const col = this.options.columns[ctx.headerColIndex];
-                        if (col && col.key) this.sorter?.sort(col.key, 'desc');
+                        // 先设置当前列，然后调用降序排序
+                        this.sortColumn = ctx.headerColIndex;
+                        this.handleHeaderSort(ctx.headerColIndex, this.options.columns[ctx.headerColIndex]);
+                    }
+                },
+                onEditColumn: (ctx) => {
+                    if (ctx.headerColIndex !== undefined) {
+                        const column = this.options.columns[ctx.headerColIndex];
+                        if (column) {
+                            import("../plugins/ColumnConfigDialog").then(({ showEditColumnDialog }) => {
+                                showEditColumnDialog(column, (newColumn) => {
+                                    this.updateColumn(ctx.headerColIndex!, newColumn);
+                                });
+                            });
+                        }
                     }
                 },
                 onInsertColumnLeft: (ctx) => {
@@ -482,6 +494,9 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                 return this.dataModel.getCellMeta(row, col);
             }
         );
+
+        // 设置列隐藏检查函数
+        this.renderer.setColumnHiddenFn((col) => this.dataModel.isColumnHidden(col));
 
         // 设置单元格值变化回调（用于复选框等直接点击修改的场景）
         this.renderer.setOnCellChange((row, col, value) => {
@@ -2395,16 +2410,36 @@ export class Sheet extends EventEmitter<SheetEventMap> {
      * 隐藏列
      */
     hideColumn(index: number): void {
+        const column = this.options.columns[index];
         this.dataModel.hideColumn(index);
+        this.renderer.clearColumnSelection(index);
+        this.renderer.updateVisibleColIndices();
+        this.renderer.renderHeader();
         this.renderer.render();
+        
+        // 触发列隐藏事件
+        this.emit('column:hide', { index, column });
+        
+        // 触发配置变更事件
+        this.emitConfigChange('column-hide', { index, column });
     }
 
     /**
      * 显示列
      */
     showColumn(index: number): void {
+        const column = this.options.columns[index];
         this.dataModel.showColumn(index);
+        this.renderer.clearColumnSelection(index);
+        this.renderer.updateVisibleColIndices();
+        this.renderer.renderHeader();
         this.renderer.render();
+        
+        // 触发列显示事件
+        this.emit('column:show', { index, column });
+        
+        // 触发配置变更事件
+        this.emitConfigChange('column-show', { index, column });
     }
 
     /**
@@ -2434,6 +2469,8 @@ export class Sheet extends EventEmitter<SheetEventMap> {
      */
     showAllColumns(): void {
         this.dataModel.showAllColumns();
+        this.renderer.updateVisibleColIndices();
+        this.renderer.renderHeader();
         this.renderer.render();
     }
 

@@ -220,6 +220,20 @@ export interface ContextMenuOptions {
   /** ===== 自定义菜单项 ===== */
   /** 自定义菜单项 */
   customItems?: MenuItem[];
+
+  /** ===== 回调函数 ===== */
+  /** 编辑列配置回调 */
+  onEditColumn?: (context: MenuContext) => void;
+  /** 插入列左侧回调 */
+  onInsertColumnLeft?: (context: MenuContext) => void;
+  /** 插入列右侧回调 */
+  onInsertColumnRight?: (context: MenuContext) => void;
+  /** 删除列回调 */
+  onDeleteColumn?: (context: MenuContext) => void;
+  /** 隐藏列回调 */
+  onHideColumn?: (context: MenuContext) => void;
+  /** 显示所有列回调 */
+  onShowAllColumns?: (context: MenuContext) => void;
 }
 
 /**
@@ -505,6 +519,8 @@ export interface SheetEventMap {
   'column:insert': ColumnInsertEvent;
   'column:delete': ColumnDeleteEvent;
   'column:select': ColumnSelectEvent;
+  'column:hide': ColumnHideEvent;
+  'column:show': ColumnShowEvent;
   
   // 选择事件
   'selection:change': SelectionEvent;
@@ -537,6 +553,8 @@ export type ConfigChangeType =
   | 'column-reorder' // 列顺序调整
   | 'column-insert'  // 列插入
   | 'column-delete'  // 列删除
+  | 'column-hide'    // 列隐藏
+  | 'column-show'    // 列显示
   | 'row-reorder'    // 行顺序调整
   | 'row-insert'     // 行插入
   | 'row-delete'     // 行删除
@@ -644,6 +662,22 @@ export interface ColumnResizeEvent {
   index: number;
   oldWidth: number;
   newWidth: number;
+  column: Column;
+}
+
+/**
+ * 列隐藏事件
+ */
+export interface ColumnHideEvent {
+  index: number;
+  column: Column;
+}
+
+/**
+ * 列显示事件
+ */
+export interface ColumnShowEvent {
+  index: number;
   column: Column;
 }
 
