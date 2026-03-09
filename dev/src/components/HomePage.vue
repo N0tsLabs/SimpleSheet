@@ -512,39 +512,207 @@ const sheet = new SimpleSheet('#container', {
 });`;
 
 const demoSourceCode = `<script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick } from 'vue';
 import { SimpleSheet } from '@n0ts123/simple-sheet';
+import type { Column } from '@n0ts123/simple-sheet';
 import '@n0ts123/simple-sheet/dist/simple-sheet.css';
 
 const sheetContainer = ref<HTMLElement | null>(null);
 let sheet: SimpleSheet | null = null;
 
-const columns = [
+// 部门选项
+const departmentOptions = [
+  { label: '技术部', value: 'tech', color: '#e3f2fd', textColor: '#1565c0' },
+  { label: '产品部', value: 'product', color: '#e8f5e9', textColor: '#2e7d32' },
+  { label: '设计部', value: 'design', color: '#fce4ec', textColor: '#c2185b' },
+  { label: '市场部', value: 'market', color: '#fff3e0', textColor: '#ef6c00' },
+  { label: '运营部', value: 'operation', color: '#f3e5f5', textColor: '#7b1fa2' },
+];
+
+const statusOptions = [
+  { label: '在职', value: 'active', color: '#c8e6c9', textColor: '#2e7d32' },
+  { label: '试用期', value: 'probation', color: '#fff9c4', textColor: '#f9a825' },
+  { label: '离职', value: 'resigned', color: '#ffcdd2', textColor: '#c62828' },
+  { label: '休假', value: 'vacation', color: '#b3e5fc', textColor: '#0277bd' },
+];
+
+const tagOptions = [
+  { label: '核心成员', value: 'core', color: '#ff5722', textColor: '#ffffff' },
+  { label: '技术骨干', value: 'tech_lead', color: '#2196f3', textColor: '#ffffff' },
+  { label: '新人', value: 'newcomer', color: '#4caf50', textColor: '#ffffff' },
+  { label: '管理层', value: 'management', color: '#9c27b0', textColor: '#ffffff' },
+  { label: '远程办公', value: 'remote', color: '#607d8b', textColor: '#ffffff' },
+];
+
+// 列定义
+const columns = ref<Column[]>([
   { key: 'id', title: 'ID', width: 60, type: 'number', readonly: true, sortable: true },
+  {
+    key: 'avatar',
+    title: '头像',
+    width: 80,
+    type: 'file',
+    // 文件列配置：限制只能上传图片，最大30MB
+    fileUpload: {
+      accept: ['image/*'],
+      maxSize: 30 * 1024 * 1024,
+      // 自定义上传函数（可选）
+      // onUpload: async (file) => {
+      //   // 调用自己的上传接口
+      //   // const url = await uploadToYourServer(file);
+      //   // return url;
+      //   return URL.createObjectURL(file);
+      // },
+    },
+  },
   { key: 'name', title: '姓名', width: 100, sortable: true },
+  { key: 'department', title: '部门', width: 110, type: 'select', options: departmentOptions, sortable: true },
+  { key: 'status', title: '状态', width: 100, type: 'select', options: statusOptions },
   { key: 'email', title: '邮箱', width: 180, type: 'email' },
-];
+  { key: 'phone', title: '电话', width: 130, type: 'phone' },
+  { key: 'age', title: '年龄', width: 80, type: 'number', sortable: true },
+  { key: 'salary', title: '薪资', width: 120, type: 'number', sortable: true, numberPrefix: '¥', useThousandSeparator: true },
+  { key: 'performance', title: '绩效', width: 80, type: 'number', sortable: true, decimalPlaces: 1 },
+  { key: 'isFullTime', title: '全职', width: 70, type: 'boolean' },
+  { key: 'joinDate', title: '入职日期', width: 120, type: 'date', dateFormat: 'YYYY-MM-DD' },
+  { key: 'website', title: '个人主页', width: 160, type: 'link' },
+  { key: 'tags', title: '标签', width: 180, type: 'select', options: tagOptions, multiple: true },
+  { key: 'remark', title: '备注', width: 200, wrapText: 'ellipsis' },
+]);
 
-const data = [
-  { id: 1, name: '张三', email: 'zhangsan@example.com' },
-  { id: 2, name: '李四', email: 'lisi@example.com' },
-];
+// 生成测试数据
+const generateData = () => {
+  const names = ['张伟', '李娜', '王芳', '刘洋', '陈明', '杨静', '赵强', '黄丽', '周杰', '吴敏'];
+  const remarks = [
+    '表现优秀', '工作认真\\n态度积极', '团队协作能力强\\n沟通顺畅',
+    '需要加强技术能力', '表现稳定', '有潜力\\n值得培养', '',
+    '绩效达标', '这是一段很长的备注文本，用于测试省略号显示效果',
+    '多行文本测试\\n第二行\\n第三行内容',
+  ];
+  const deptValues = ['tech', 'product', 'design', 'market', 'operation'];
+  const statusValues = ['active', 'probation', 'resigned', 'vacation'];
+  const tagValues = ['core', 'tech_lead', 'newcomer', 'management', 'remote'];
+  const avatars = [
+    'https://api.dicebear.com/7.x/avataaars/svg?seed=1',
+    'https://api.dicebear.com/7.x/avataaars/svg?seed=2',
+    'https://api.dicebear.com/7.x/avataaars/svg?seed=3',
+    '',
+    'https://api.dicebear.com/7.x/avataaars/svg?seed=5',
+  ];
 
-onMounted(() => {
-  sheet = new SimpleSheet(sheetContainer.value!, {
-    columns,
-    data,
+  const data = [];
+  for (let i = 0; i < 100; i++) {
+    const numTags = 1 + Math.floor(Math.random() * 3);
+    const shuffledTags = [...tagValues].sort(() => Math.random() - 0.5);
+    const selectedTags = shuffledTags.slice(0, numTags);
+
+    data.push({
+      id: i + 1,
+      avatar: i < 5 ? (avatars[i] ? { url: avatars[i], name: 'avatar'+(i+1)+'.svg' } : null) : null,
+      name: names[i % names.length],
+      department: deptValues[i % deptValues.length],
+      status: statusValues[i % statusValues.length],
+      email: 'user'+(i + 1)+'@example.com',
+      phone: '138'+String(10000000 + Math.floor(Math.random() * 90000000)).slice(0, 8),
+      age: 22 + Math.floor(Math.random() * 30),
+      salary: Math.floor(8000 + Math.random() * 42000),
+      performance: Number((3 + Math.random() * 2).toFixed(1)),
+      isFullTime: Math.random() > 0.2,
+      joinDate: '202'+Math.floor(Math.random() * 4)+'-'+String(1 + Math.floor(Math.random() * 12)).padStart(2, '0')+'-'+String(1 + Math.floor(Math.random() * 28)).padStart(2, '0'),
+      website: i % 3 === 0 ? 'https://github.com/user'+(i + 1) : '',
+      tags: selectedTags,
+      remark: remarks[i % remarks.length],
+    });
+  }
+  return data;
+};
+
+const currentData = ref(generateData());
+
+// 初始化表格
+const initSheet = async () => {
+  await nextTick();
+  if (!sheetContainer.value) return;
+
+  sheet = new SimpleSheet(sheetContainer.value, {
+    columns: columns.value,
+    data: currentData.value,
     rowHeight: 36,
     headerHeight: 40,
     theme: 'light',
     showRowNumber: true,
+    allowInsertRow: true,
+    allowDeleteRow: true,
+    allowInsertColumn: true,
+    allowDeleteColumn: true,
+    allowMultiSelect: true,
     features: {
+      columnReorder: true,
+      rowReorder: true,
+      columnResize: true,
+      autoFill: true,
       sorter: true,
       filter: true,
       search: true,
       validator: true,
+      filePaste: true,
+    },
+    contextMenuOptions: {
+      showCopy: true,
+      showPaste: true,
+      showCut: true,
+      showSelectAll: true,
+      showInsertRowAbove: true,
+      showInsertRowBelow: true,
+      showDeleteRow: true,
+      showClearRow: true,
+      showInsertColumnLeft: true,
+      showInsertColumnRight: true,
+      showDeleteColumn: true,
+      showClearColumn: true,
+      showSortAsc: true,
+      showSortDesc: true,
+      showSortCancel: true,
+      showFilter: true,
+      showMergeCell: true,
+      showUnmergeCell: true,
     },
   });
+
+  // 添加验证规则
+  sheet.addValidationRule('email', { type: 'email', message: '请输入有效的邮箱地址' });
+  sheet.addValidationRule('age', { type: 'range', min: 18, max: 65, message: '年龄必须在 18-65 之间' });
+  sheet.addValidationRule('performance', { type: 'range', min: 0, max: 5, message: '绩效必须在 0-5 之间' });
+
+  // 事件监听
+  sheet.on('cell:click', (e) => {
+    console.log('点击单元格：行'+(e.row + 1)+', 列'+(e.col + 1));
+  });
+  
+  sheet.on('data:change', (e) => {
+    console.log('数据变更:', e);
+  });
+  
+  sheet.on('file:paste:start', (e) => {
+    console.log('开始上传 '+e.files.length+' 个文件到行'+(e.row + 1));
+  });
+  
+  sheet.on('file:paste', (e) => {
+    console.log('文件上传成功:', e.result.name);
+  });
+  
+  sheet.on('file:paste:error', (e) => {
+    console.error('文件上传失败:', e.file.name, e.error.message);
+  });
+};
+
+onMounted(() => {
+  initSheet();
+});
+
+onUnmounted(() => {
+  sheet?.destroy();
+  sheet = null;
 });
 <` + `/script>
 
@@ -552,9 +720,10 @@ onMounted(() => {
   <div ref="sheetContainer" class="sheet-container"></div>
 </template>
 
-<style>
+<style scoped>
 .sheet-container {
   height: 500px;
+  width: 100%;
 }
 </style>`;
 

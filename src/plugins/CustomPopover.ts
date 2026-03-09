@@ -401,6 +401,177 @@ export function showPopover(
       break;
     }
 
+    case 'file': {
+      const { files = [], readonly: isFileReadonly, onDeleteFile, onAddFile } = config;
+      
+      // 文件列表容器
+      const fileListEl = createElement('div', 'ss-popover-file-list');
+      setStyles(fileListEl, {
+        maxHeight: '300px',
+        overflowY: 'auto',
+      });
+      
+      if (files.length === 0) {
+        // 空状态
+        const emptyEl = createElement('div', 'ss-popover-file-empty');
+        emptyEl.textContent = '暂无文件' + (isFileReadonly ? '' : '，点击 + 添加');
+        setStyles(emptyEl, {
+          padding: '20px',
+          textAlign: 'center',
+          color: '#999',
+          fontSize: '13px',
+        });
+        fileListEl.appendChild(emptyEl);
+      } else {
+        // 渲染文件列表
+        files.forEach((file, index) => {
+          const fileItem = createElement('div', 'ss-popover-file-item');
+          setStyles(fileItem, {
+            display: 'flex',
+            alignItems: 'center',
+            padding: '8px 12px',
+            gap: '8px',
+            cursor: 'pointer',
+            transition: 'background-color 0.2s',
+            borderRadius: '4px',
+          });
+          
+          fileItem.addEventListener('mouseenter', () => {
+            setStyles(fileItem, { backgroundColor: '#f5f5f5' });
+          });
+          fileItem.addEventListener('mouseleave', () => {
+            setStyles(fileItem, { backgroundColor: 'transparent' });
+          });
+          
+          // 判断是否为图片
+          const isImage = file.type?.startsWith('image/') ||
+                         /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(file.name || file.url);
+          
+          if (isImage) {
+            // 图片缩略图
+            const thumbnail = createElement('img', 'ss-popover-file-thumbnail');
+            thumbnail.src = file.url;
+            thumbnail.alt = file.name || '图片';
+            setStyles(thumbnail, {
+              width: '40px',
+              height: '40px',
+              objectFit: 'cover',
+              borderRadius: '4px',
+              flexShrink: '0',
+              backgroundColor: '#f5f5f5',
+            });
+            thumbnail.addEventListener('error', () => {
+              thumbnail.style.display = 'none';
+              const fallback = createElement('span');
+              fallback.textContent = '🖼️';
+              setStyles(fallback, { fontSize: '24px' });
+              fileItem.insertBefore(fallback, fileItem.firstChild);
+            });
+            fileItem.appendChild(thumbnail);
+          } else {
+            // 文件图标
+            const icon = createElement('span', 'ss-popover-file-icon');
+            icon.textContent = '📄';
+            setStyles(icon, { fontSize: '24px', flexShrink: '0' });
+            fileItem.appendChild(icon);
+          }
+          
+          // 文件名
+          const nameEl = createElement('span', 'ss-popover-file-name');
+          nameEl.textContent = file.name || '未命名文件';
+          setStyles(nameEl, {
+            flex: '1',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            fontSize: '13px',
+          });
+          fileItem.appendChild(nameEl);
+          
+          // 删除按钮（非只读模式）
+          if (!isFileReadonly && onDeleteFile) {
+            const deleteBtn = createElement('button', 'ss-popover-file-delete');
+            deleteBtn.innerHTML = '×';
+            setStyles(deleteBtn, {
+              width: '20px',
+              height: '20px',
+              borderRadius: '50%',
+              border: 'none',
+              backgroundColor: '#ff4d4f',
+              color: '#fff',
+              cursor: 'pointer',
+              fontSize: '14px',
+              lineHeight: '1',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: '0',
+              transition: 'opacity 0.2s',
+            });
+            deleteBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              onDeleteFile(file, index);
+            });
+            fileItem.addEventListener('mouseenter', () => {
+              setStyles(deleteBtn, { opacity: '1' });
+            });
+            fileItem.addEventListener('mouseleave', () => {
+              setStyles(deleteBtn, { opacity: '0' });
+            });
+            fileItem.appendChild(deleteBtn);
+          }
+          
+          // 点击文件打开
+          fileItem.addEventListener('click', () => {
+            window.open(file.url, '_blank');
+          });
+          
+          fileListEl.appendChild(fileItem);
+        });
+      }
+      
+      // 添加文件按钮（非只读模式）
+      if (!isFileReadonly && onAddFile) {
+        const addBtn = createElement('button', 'ss-popover-file-add-btn');
+        addBtn.innerHTML = '<span style="font-size: 18px; margin-right: 4px;">+</span> 添加文件';
+        setStyles(addBtn, {
+          width: '100%',
+          padding: '10px',
+          marginTop: files.length > 0 ? '8px' : '0',
+          border: '1px dashed #d9d9d9',
+          borderRadius: '4px',
+          backgroundColor: '#fafafa',
+          color: '#666',
+          cursor: 'pointer',
+          fontSize: '13px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transition: 'all 0.2s',
+        });
+        addBtn.addEventListener('mouseenter', () => {
+          setStyles(addBtn, {
+            borderColor: '#1890ff',
+            color: '#1890ff',
+          });
+        });
+        addBtn.addEventListener('mouseleave', () => {
+          setStyles(addBtn, {
+            borderColor: '#d9d9d9',
+            color: '#666',
+          });
+        });
+        addBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          onAddFile();
+        });
+        fileListEl.appendChild(addBtn);
+      }
+      
+      contentEl.appendChild(fileListEl);
+      break;
+    }
+
     case 'custom': {
       if (render) {
         const customContent = render(actualValue, rowData);

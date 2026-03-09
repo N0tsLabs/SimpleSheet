@@ -805,6 +805,7 @@ export type PopoverContentType =
   | 'email'        // 邮箱（显示地址 + 复制/发送邮件按钮）
   | 'phone'        // 电话（显示号码 + 复制/拨打按钮）
   | 'tags'         // 标签列表
+  | 'file'         // 文件列表（支持图片预览、删除、添加）
   | 'custom';      // 自定义内容
 
 /**
@@ -866,6 +867,22 @@ export interface ExpandPopoverConfig {
   /** ===== 自定义内容配置 ===== */
   /** 自定义渲染函数 */
   render?: (value: any, rowData: RowData) => HTMLElement | string;
+
+  /** ===== 文件列表配置（type 为 file 时使用） ===== */
+  /** 文件列表 */
+  files?: Array<{ url: string; name?: string; type?: string }>;
+  /** 是否只读（不显示删除/添加按钮） */
+  readonly?: boolean;
+  /** 删除文件回调 */
+  onDeleteFile?: (file: { url: string; name?: string; type?: string }, index: number) => void;
+  /** 添加文件回调 */
+  onAddFile?: () => void;
+  /** 文件上传配置 */
+  fileUpload?: {
+    accept?: string[];
+    maxSize?: number;
+    onUpload?: (file: File) => Promise<{ url: string; name?: string; type?: string }>;
+  };
 
   /** ===== 操作按钮配置 ===== */
   /** 额外操作按钮 */

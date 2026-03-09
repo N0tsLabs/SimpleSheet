@@ -619,18 +619,13 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         const handleGlobalClick = (e: MouseEvent) => {
             const target = e.target as HTMLElement;
             
-            // 如果点击的是文件预览浮层或其内部，不处理
-            if (this.currentFilePreview && this.currentFilePreview.contains(target)) {
-                return;
-            }
-            
             // 如果点击的是对应的单元格，不处理（让 mousedown 处理）
             if (this.currentFilePreviewCell && this.currentFilePreviewCell.contains(target)) {
                 return;
             }
             
             // 否则关闭文件预览
-            if (this.currentFilePreview) {
+            if (this.currentFilePreviewCell) {
                 this.closeFilePreview();
             }
         };
@@ -721,27 +716,30 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             this.emit("selection:change", event);
 
             // 处理悬浮窗跟随高亮单元格（键盘导航时）
-            const activeCell = this.selectionManager.getActiveCell();
-            if (activeCell) {
-                const cellEl = this.renderer.getCellElement(activeCell.row, activeCell.col);
-                if (cellEl) {
-                    // 检查当前单元格是否应该显示悬浮窗
-                    const shouldShowPopover = this.shouldShowPopoverForCell(activeCell.row, activeCell.col);
-                    if (shouldShowPopover) {
-                        // 关闭旧的悬浮窗并显示新的
-                        closePopover();
-                        this.closeFilePreview();
-                        this.showPopoverForCell(activeCell.row, activeCell.col);
-                    } else {
-                        // 当前单元格不需要显示悬浮窗，关闭所有
-                        closePopover();
-                        this.closeFilePreview();
+            // 如果正在粘贴操作中，跳过自动显示悬浮窗（由粘贴事件处理）
+            if (!this.isPasting) {
+                const activeCell = this.selectionManager.getActiveCell();
+                if (activeCell) {
+                    const cellEl = this.renderer.getCellElement(activeCell.row, activeCell.col);
+                    if (cellEl) {
+                        // 检查当前单元格是否应该显示悬浮窗
+                        const shouldShowPopover = this.shouldShowPopoverForCell(activeCell.row, activeCell.col);
+                        if (shouldShowPopover) {
+                            // 关闭旧的悬浮窗并显示新的
+                            closePopover();
+                            this.closeFilePreview();
+                            this.showPopoverForCell(activeCell.row, activeCell.col);
+                        } else {
+                            // 当前单元格不需要显示悬浮窗，关闭所有
+                            closePopover();
+                            this.closeFilePreview();
+                        }
                     }
+                } else {
+                    // 没有活动单元格，关闭所有悬浮窗
+                    closePopover();
+                    this.closeFilePreview();
                 }
-            } else {
-                // 没有活动单元格，关闭所有悬浮窗
-                closePopover();
-                this.closeFilePreview();
             }
 
             // 更新填充手柄位置
@@ -916,6 +914,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
 
         // 文件粘贴事件
         this.filePasteHandler.on("paste:start", ({ files, row, col }) => {
+            this.isPasting = true;
             Toast.info(`开始上传 ${files.length} 个文件...`, 2000);
             this.emit("file:paste:start" as any, { files, row, col });
         });
@@ -925,7 +924,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             this.emit("file:paste" as any, { file, result, row, col });
             
             // 如果当前有打开的文件预览浮层，且是同一个单元格，刷新预览
-            if (this.currentFilePreview && this.currentFilePreviewCell) {
+            if (this.currentFilePreviewCell) {
                 const previewRow = parseInt(this.currentFilePreviewCell.dataset.row || "-1");
                 const previewCol = parseInt(this.currentFilePreviewCell.dataset.col || "-1");
                 if (previewRow === row && previewCol === col) {
@@ -933,17 +932,27 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                     const newValue = this.dataModel.getCellValue(row, col);
                     // 保存当前单元格元素引用
                     const cellEl = this.currentFilePreviewCell;
-                    // 关闭旧预览
+                    // 关闭旧预览（包括CustomPopover）
                     this.closeFilePreview();
-                    // 立即重新打开预览（使用新的值）
-                    this.showFilePreview(cellEl, newValue, row, col);
+                    closePopover();
+                    // 延迟重新打开预览，避免与选区变更事件冲突
+                    setTimeout(() => {
+                        this.showFilePreview(cellEl, newValue, row, col);
+                        // 重置粘贴标志
+                        this.isPasting = false;
+                    }, 100);
+                } else {
+                    this.isPasting = false;
                 }
+            } else {
+                this.isPasting = false;
             }
         });
 
         this.filePasteHandler.on("paste:error", ({ file, error }) => {
             Toast.error(`文件 "${file.name}" 上传失败: ${error.message}`, 3000);
             this.emit("file:paste:error" as any, { file, error });
+            this.isPasting = false;
         });
     }
 
@@ -989,18 +998,16 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         hidePopover();
 
         // 如果点击的不是文件预览浮层，关闭文件预览
-        if (this.currentFilePreview && !this.currentFilePreview.contains(target)) {
+        if (this.currentFilePreviewCell) {
             const clickedCell = target.closest(".ss-cell");
-            // 如果点击的不是文件预览浮层本身，也不是对应的单元格，关闭预览
+            // 如果点击的不是对应的单元格，关闭预览
             if (!clickedCell || clickedCell !== this.currentFilePreviewCell) {
-                this.currentFilePreview.remove();
-                this.currentFilePreview = null;
-                this.currentFilePreviewCell = null;
+                this.closeFilePreview();
             }
         }
 
-        // 如果点击了文件预览浮层，不继续处理
-        if (this.currentFilePreview && this.currentFilePreview.contains(target as Node)) {
+        // 如果点击了文件预览浮层，不继续处理（CustomPopover 内部点击）
+        if (target.closest(".ss-file-preview-popover")) {
             return;
         }
 
@@ -1098,8 +1105,8 @@ export class Sheet extends EventEmitter<SheetEventMap> {
 
         if (!cell) return;
 
-        // 检查是否点击了文件预览浮层
-        if (this.currentFilePreview && this.currentFilePreview.contains(target as Node)) {
+        // 检查是否点击了文件预览浮层（CustomPopover）
+        if (target.closest(".ss-file-preview-popover")) {
             return; // 点击了文件预览浮层，不处理
         }
 
@@ -1342,7 +1349,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     }
 
     /**
-     * 显示文件预览浮层
+     * 显示文件预览浮层（使用 CustomPopover 统一悬浮窗系统）
      */
     private showFilePreview(cellEl: HTMLElement, value: any, row: number, col: number): void {
         // 如果正在编辑，不显示预览
@@ -1350,20 +1357,15 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             return;
         }
 
-        // 标准化文件值 - 修复 [object Object] 显示问题
+        // 标准化文件值
         let files: Array<{ url: string; name?: string; type?: string }> = [];
 
         if (Array.isArray(value)) {
             files = value
                 .map((v) => {
                     if (typeof v === "object" && v !== null) {
-                        // 确保 name 是字符串类型
                         const name = v.name ? String(v.name) : undefined;
-                        return { 
-                            url: v.url || "", 
-                            name,
-                            type: v.type
-                        };
+                        return { url: v.url || "", name, type: v.type };
                     }
                     return { url: String(v || "") };
                 })
@@ -1374,13 +1376,8 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                 .map((url) => ({ url: url.trim() }))
                 .filter((f) => f.url);
         } else if (typeof value === "object" && value !== null) {
-            // 处理单个对象值的情况
             const name = value.name ? String(value.name) : undefined;
-            files = [{ 
-                url: value.url || "", 
-                name,
-                type: value.type
-            }].filter((f) => f.url);
+            files = [{ url: value.url || "", name, type: value.type }].filter((f) => f.url);
         } else if (value) {
             files = [{ url: String(value) }];
         }
@@ -1388,266 +1385,41 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         // 获取列配置
         const column = this.options.columns[col];
         const isReadonly = this.options.readonly || column?.readonly === true;
+        const rowData = this.dataModel.getRowData(row) || {};
 
-        // 创建文件预览浮层
-        const overlay = createElement("div", "ss-cell-file-preview");
-
-        // 标题栏（包含标题和操作按钮）
-        const header = createElement("div", "ss-file-preview-header");
-        setStyles(header, {
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "10px 12px",
-            borderBottom: "1px solid #e8e8e8",
+        // 使用 CustomPopover 显示文件列表
+        showPopover(cellEl, value, rowData, {
+            type: 'file',
+            title: `文件列表 (${files.length})`,
+            showClose: false,
+            width: Math.max(cellEl.getBoundingClientRect().width, 240),
+            maxWidth: 400,
+            files,
+            readonly: isReadonly,
+            onDeleteFile: (file, index) => {
+                this.deleteFileFromCell(row, col, index);
+            },
+            onAddFile: () => {
+                this.showFileUploadDialog(row, col);
+            },
+            closeOnBlur: true,
+        }, {
+            type: 'file',
+            column,
+            cellValue: value,
+            rowData
         });
 
-        // 标题
-        const title = createElement("div", "ss-file-preview-title");
-        title.textContent = `文件列表 (${files.length})`;
-        header.appendChild(title);
-
-        // 添加按钮（非只读模式下显示）
-        if (!isReadonly) {
-            const addBtn = createElement("button", "ss-file-preview-add-btn");
-            addBtn.innerHTML = "+";
-            addBtn.title = "添加文件";
-            setStyles(addBtn, {
-                width: "24px",
-                height: "24px",
-                borderRadius: "4px",
-                border: "1px solid #d9d9d9",
-                backgroundColor: "#fff",
-                cursor: "pointer",
-                fontSize: "16px",
-                lineHeight: "1",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#666",
-            });
-            addBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                this.showFileUploadDialog(row, col);
-            });
-            header.appendChild(addBtn);
-        }
-
-        overlay.appendChild(header);
-
-        // 文件列表
-        const fileList = createElement("div", "ss-file-preview-list");
-        
-        if (files.length === 0) {
-            // 空状态提示
-            const emptyTip = createElement("div", "ss-file-preview-empty");
-            emptyTip.textContent = "暂无文件，点击 + 添加";
-            setStyles(emptyTip, {
-                padding: "20px",
-                textAlign: "center",
-                color: "#999",
-                fontSize: "13px",
-            });
-            fileList.appendChild(emptyTip);
-        } else {
-            files.forEach((file, index) => {
-                const fileItem = createElement("div", "ss-file-preview-item");
-                setStyles(fileItem, {
-                    display: "flex",
-                    alignItems: "center",
-                    padding: "8px 12px",
-                    gap: "8px",
-                    cursor: "pointer",
-                    transition: "background-color 0.2s",
-                });
-                fileItem.addEventListener("mouseenter", () => {
-                    setStyles(fileItem, { backgroundColor: "#f5f5f5" });
-                });
-                fileItem.addEventListener("mouseleave", () => {
-                    setStyles(fileItem, { backgroundColor: "transparent" });
-                });
-
-                // 判断是否为图片类型
-                const isImage = file.type?.startsWith("image/") ||
-                               /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(file.name || file.url);
-                
-                if (isImage) {
-                    // 图片类型：显示缩略图
-                    const thumbnail = createElement("img", "ss-file-preview-thumbnail");
-                    thumbnail.src = file.url;
-                    thumbnail.alt = file.name || "图片";
-                    setStyles(thumbnail, {
-                        width: "40px",
-                        height: "40px",
-                        objectFit: "cover",
-                        borderRadius: "4px",
-                        flexShrink: "0",
-                        backgroundColor: "#f5f5f5",
-                    });
-                    // 图片加载失败时显示默认图标
-                    thumbnail.addEventListener("error", () => {
-                        thumbnail.style.display = "none";
-                        const fallbackIcon = createElement("span", "ss-file-preview-icon");
-                        fallbackIcon.textContent = "🖼️";
-                        setStyles(fallbackIcon, {
-                            fontSize: "24px",
-                            flexShrink: "0",
-                            width: "40px",
-                            height: "40px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                        });
-                        fileItem.insertBefore(fallbackIcon, thumbnail);
-                    });
-                    fileItem.appendChild(thumbnail);
-                } else {
-                    // 非图片类型：显示图标
-                    const icon = createElement("span", "ss-file-preview-icon");
-                    icon.textContent = this.getFileIcon(file.type, file.name);
-                    setStyles(icon, {
-                        fontSize: "24px",
-                        flexShrink: "0",
-                        width: "40px",
-                        height: "40px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                    });
-                    fileItem.appendChild(icon);
-                }
-
-                // 文件名或URL
-                const name = createElement("span", "ss-file-preview-name");
-                // 修复：确保文件名是字符串
-                const displayName = file.name 
-                    ? String(file.name) 
-                    : (file.url.split("/").pop() || `文件 ${index + 1}`);
-                name.textContent = displayName;
-                name.title = file.url;
-                setStyles(name, {
-                    flex: "1",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    fontSize: "13px",
-                    color: "#333",
-                });
-                fileItem.appendChild(name);
-
-                // 删除按钮（非只读模式下显示）
-                if (!isReadonly) {
-                    const deleteBtn = createElement("button", "ss-file-preview-delete-btn");
-                    deleteBtn.innerHTML = "×";
-                    deleteBtn.title = "删除";
-                    setStyles(deleteBtn, {
-                        width: "20px",
-                        height: "20px",
-                        borderRadius: "4px",
-                        border: "none",
-                        backgroundColor: "transparent",
-                        cursor: "pointer",
-                        fontSize: "14px",
-                        lineHeight: "1",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "#999",
-                        opacity: "0",
-                        transition: "opacity 0.2s",
-                    });
-                    deleteBtn.addEventListener("mouseenter", () => {
-                        setStyles(deleteBtn, { 
-                            backgroundColor: "#ff4d4f",
-                            color: "#fff",
-                        });
-                    });
-                    deleteBtn.addEventListener("mouseleave", () => {
-                        setStyles(deleteBtn, { 
-                            backgroundColor: "transparent",
-                            color: "#999",
-                        });
-                    });
-                    deleteBtn.addEventListener("click", (e) => {
-                        e.stopPropagation();
-                        this.deleteFileFromCell(row, col, index);
-                    });
-                    fileItem.appendChild(deleteBtn);
-
-                    // 鼠标悬停时显示删除按钮
-                    fileItem.addEventListener("mouseenter", () => {
-                        setStyles(deleteBtn, { opacity: "1" });
-                    });
-                    fileItem.addEventListener("mouseleave", () => {
-                        setStyles(deleteBtn, { opacity: "0" });
-                    });
-                }
-
-                // 点击处理：图片先预览，非图片直接跳转
-                fileItem.addEventListener("click", (e) => {
-                    // 如果点击的是删除按钮，不处理
-                    if ((e.target as HTMLElement).closest(".ss-file-preview-delete-btn")) {
-                        return;
-                    }
-                    e.stopPropagation();
-                    
-                    // 判断是否为图片
-                    const isImage = file.type?.startsWith("image/") ||
-                                   /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(file.name || file.url);
-                    
-                    if (isImage) {
-                        // 图片类型：先打开图片预览
-                        showImagePreview(file.url, file.name || "图片");
-                    } else {
-                        // 非图片类型：直接跳转链接
-                        window.open(file.url, "_blank", "noopener,noreferrer");
-                    }
-                });
-
-                fileList.appendChild(fileItem);
-            });
-        }
-        
-        overlay.appendChild(fileList);
-
-        // 定位浮层
-        const cellRect = cellEl.getBoundingClientRect();
-        const root = this.renderer.getRoot();
-        const rootRect = root?.getBoundingClientRect();
-
-        if (rootRect) {
-            setStyles(overlay, {
-                position: "fixed",
-                top: `${cellRect.bottom + 4}px`,
-                left: `${cellRect.left}px`,
-                zIndex: "1000",
-                minWidth: `${Math.max(cellRect.width, 240)}px`,
-                maxWidth: "400px",
-                maxHeight: "320px",
-                backgroundColor: "#fff",
-                borderRadius: "8px",
-                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-                overflow: "hidden",
-            });
-        }
-
-        // 添加到页面
-        document.body.appendChild(overlay);
-
-        // 存储当前预览浮层和对应的单元格，用于清理
-        this.currentFilePreview = overlay;
+        // 存储当前单元格引用（用于后续刷新）
         this.currentFilePreviewCell = cellEl;
     }
 
     /**
-     * 关闭文件预览浮层
+     * 关闭文件预览浮层（现在使用 CustomPopover，只需关闭 popover）
      */
     private closeFilePreview(): void {
-        if (this.currentFilePreview) {
-            this.currentFilePreview.remove();
-            this.currentFilePreview = null;
-            this.currentFilePreviewCell = null;
-        }
+        closePopover();
+        this.currentFilePreviewCell = null;
     }
 
     /**
@@ -1659,10 +1431,12 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         if (!column) return false;
 
         const cellValue = this.dataModel.getCellValue(row, col);
-        if (!cellValue) return false;
-
-        // 文件类型
+        
+        // 文件类型：即使没有值也要显示（空列表+添加按钮）
         if (column.type === 'file') return true;
+        
+        // 其他类型需要值才显示
+        if (!cellValue) return false;
 
         // 链接/邮箱/电话类型
         if (column.type === 'link' || column.type === 'email' || column.type === 'phone') return true;
@@ -1698,9 +1472,10 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         if (!column) return;
 
         const cellValue = this.dataModel.getCellValue(row, col);
-        if (!cellValue) return;
-
         const rowData = this.dataModel.getRowData(row) || {};
+        
+        // 对于文件类型，即使没有值也要显示悬浮窗（显示空列表和添加按钮）
+        if (!cellValue && column.type !== 'file') return;
         const cellEl = this.renderer.getCellElement(row, col);
         if (!cellEl) return;
 
@@ -1951,10 +1726,14 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     }
 
     /**
-     * 当前文件预览浮层
+     * 当前文件预览对应的单元格元素
      */
-    private currentFilePreview: HTMLElement | null = null;
     private currentFilePreviewCell: HTMLElement | null = null;
+    
+    /**
+     * 是否正在处理粘贴操作（用于防止选区变更事件重复显示悬浮窗）
+     */
+    private isPasting = false;
 
     /**
      * 处理方向键导航
