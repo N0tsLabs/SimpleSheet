@@ -1,6 +1,6 @@
 {
     "name": "@n0ts123/simple-sheet",
-    "version": "0.1.7",
+    "version": "0.1.8",
     "type": "module",
     "description": "轻量级、零依赖的 Excel 风格表格框架",
     "main": "dist/simple-sheet.cjs.js",
