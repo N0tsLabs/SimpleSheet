@@ -8,21 +8,41 @@ import type { ExpandPopoverConfig, PopoverAction, RowData, SelectOption } from '
 
 // 当前显示的悬浮窗
 let currentPopover: HTMLElement | null = null;
+let currentPopoverCell: HTMLElement | null = null;
+let currentPopoverConfig: PopoverShowConfig | null = null;
 let closeHandler: ((e: Event) => void) | null = null;
 let onDblClickCallback: ((cell: HTMLElement) => void) | null = null;
+
+/**
+ * 悬浮窗显示配置（用于键盘导航时重新显示）
+ */
+export interface PopoverShowConfig {
+  type: 'file' | 'link' | 'email' | 'phone' | 'select' | 'text' | 'custom' | string;
+  column?: any;
+  cellValue?: any;
+  rowData?: RowData;
+  expandPopover?: ExpandPopoverConfig;
+}
+
+/**
+ * 获取当前悬浮窗的配置信息
+ */
+export function getCurrentPopoverConfig(): PopoverShowConfig | null {
+  return currentPopoverConfig;
+}
+
+/**
+ * 获取当前悬浮窗关联的单元格
+ */
+export function getCurrentPopoverCell(): HTMLElement | null {
+  return currentPopoverCell;
+}
 
 /**
  * 设置双击悬浮窗时的回调
  */
 export function setPopoverDblClickHandler(callback: (cell: HTMLElement) => void): void {
   onDblClickCallback = callback;
-}
-
-/**
- * 获取当前展开的单元格
- */
-export function getCurrentPopoverCell(): HTMLElement | null {
-  return currentPopover?.parentElement?.parentElement?.parentElement?.parentElement || null;
 }
 
 /**
@@ -38,6 +58,9 @@ export function closePopover(): void {
     document.removeEventListener('scroll', closeHandler, true);
     closeHandler = null;
   }
+  // 清除配置信息
+  currentPopoverCell = null;
+  currentPopoverConfig = null;
 }
 
 /**
@@ -93,10 +116,20 @@ export function showPopover(
   cell: HTMLElement,
   value: any,
   rowData: RowData,
-  config: ExpandPopoverConfig
+  config: ExpandPopoverConfig,
+  showConfig?: PopoverShowConfig
 ): void {
   // 先关闭已有的
   closePopover();
+
+  // 保存当前悬浮窗的配置信息（用于键盘导航时重新显示）
+  currentPopoverCell = cell;
+  currentPopoverConfig = showConfig || {
+    type: config.type || 'custom',
+    cellValue: value,
+    rowData,
+    expandPopover: config
+  };
 
   const {
     type,

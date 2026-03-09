@@ -39,7 +39,7 @@ import { addEvent, addEvents } from "../utils/dom";
 import { normalizeRange, deepClone } from "../utils/helpers";
 import { createElement, setStyles } from "../utils/dom";
 import { showImagePreview } from "../plugins/ImageViewer";
-import { showPopover, hidePopover, setPopoverDblClickHandler } from "../plugins/CustomPopover";
+import { showPopover, hidePopover, setPopoverDblClickHandler, getCurrentPopoverConfig, getCurrentPopoverCell, closePopover } from "../plugins/CustomPopover";
 import { Toast } from "../utils/Toast";
 
 // 导入样式
@@ -720,6 +720,30 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             }, 0);
             this.emit("selection:change", event);
 
+            // 处理悬浮窗跟随高亮单元格（键盘导航时）
+            const activeCell = this.selectionManager.getActiveCell();
+            if (activeCell) {
+                const cellEl = this.renderer.getCellElement(activeCell.row, activeCell.col);
+                if (cellEl) {
+                    // 检查当前单元格是否应该显示悬浮窗
+                    const shouldShowPopover = this.shouldShowPopoverForCell(activeCell.row, activeCell.col);
+                    if (shouldShowPopover) {
+                        // 关闭旧的悬浮窗并显示新的
+                        closePopover();
+                        this.closeFilePreview();
+                        this.showPopoverForCell(activeCell.row, activeCell.col);
+                    } else {
+                        // 当前单元格不需要显示悬浮窗，关闭所有
+                        closePopover();
+                        this.closeFilePreview();
+                    }
+                }
+            } else {
+                // 没有活动单元格，关闭所有悬浮窗
+                closePopover();
+                this.closeFilePreview();
+            }
+
             // 更新填充手柄位置
             // 关键修复：检查选中的单元格是否包含只读单元格，如果包含则不显示填充手柄
             const primaryRange = this.selectionManager.getPrimaryRange();
@@ -1149,70 +1173,8 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             if (cellEl) {
                 // 延迟显示悬浮窗，避免在事件处理期间触发布局重计算
                 const showPopovers = () => {
-                    if (column.type === "file") {
-                        // 文件类型 - 显示文件列表预览
-                        this.showFilePreview(cellEl, cellValue, cell.row, cell.col);
-                    } else if (column.type === "link" || column.type === "email" || column.type === "phone") {
-                        // 链接/邮箱/电话类型 - 显示悬浮窗
-                        showPopover(cellEl, cellValue, rowData, {
-                            type: column.type,
-                            valueField: column.key,
-                        });
-                    } else if (column.type === "select") {
-                        // 标签类型（select）- 显示标签悬浮窗
-                        showPopover(cellEl, cellValue, rowData, {
-                            type: 'tags',
-                            tagsField: column.key,
-                            tagOptions: column.options?.map(opt => ({
-                                value: opt.value,
-                                label: opt.label,
-                                color: opt.color,
-                                textColor: opt.textColor
-                            })) || [],
-                            multiple: column.multiple ?? false, // 使用列配置的多选属性，默认单选
-                            onChange: (newValue: any) => {
-                                // 更新单元格值
-                                this.dataModel.setCellValue(cell.row, cell.col, newValue);
-                                // 重新渲染单元格
-                                this.renderer.render();
-                                // 触发数据变更事件
-                                this.emit("data:change", {
-                                    type: "set",
-                                    changes: [{
-                                        row: cell.row,
-                                        col: cell.col,
-                                        oldValue: cellValue,
-                                        newValue
-                                    }]
-                                });
-                            }
-                        });
-                    } else if (column.expandPopover) {
-                        // 自定义悬浮窗配置
-                        showPopover(cellEl, cellValue, rowData, column.expandPopover);
-                    } else {
-                        // 检查是否是多行文本，如果是，使用悬浮窗显示预览
-                        // 注意：这里需要检查 wrapText 配置，如果配置了换行，即使没有省略号也应该显示预览
-                        const fullText = cellEl.getAttribute("data-full-text");
-                        if (fullText) {
-                            // 检查是否配置了换行模式
-                            const wrapText = column.wrapText;
-                            const hasNewlines = fullText.includes("\n");
-                            const cellText = cellEl.textContent || "";
-                            const hasEllipsis = cellText.includes("...");
-
-                            // 如果配置了换行模式（wrapText 为 'wrap'），或者包含换行符，或者有省略号，则显示预览
-                            if (wrapText === "wrap" || hasNewlines || hasEllipsis) {
-                                // 使用统一的悬浮窗显示完整文本（不显示标题）
-                                showPopover(cellEl, fullText, rowData, {
-                                    type: 'text',
-                                    content: fullText, // 使用 content 字段传递完整文本
-                                    width: column.width,
-                                    maxWidth: 400
-                                });
-                            }
-                        }
-                    }
+                    // 使用统一的 showPopoverForCell 方法显示悬浮窗
+                    this.showPopoverForCell(cell.row, cell.col);
                 };
                 // 使用 setTimeout(0) 延迟到下一个事件循环，避免在事件处理期间触发布局变化
                 setTimeout(showPopovers, 0);
@@ -1685,6 +1647,136 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             this.currentFilePreview.remove();
             this.currentFilePreview = null;
             this.currentFilePreviewCell = null;
+        }
+    }
+
+    /**
+     * 检查单元格是否应该显示悬浮窗
+     * 支持所有有悬浮窗的列类型：file, link, email, phone, select, expandPopover, 多行文本等
+     */
+    private shouldShowPopoverForCell(row: number, col: number): boolean {
+        const column = this.options.columns[col];
+        if (!column) return false;
+
+        const cellValue = this.dataModel.getCellValue(row, col);
+        if (!cellValue) return false;
+
+        // 文件类型
+        if (column.type === 'file') return true;
+
+        // 链接/邮箱/电话类型
+        if (column.type === 'link' || column.type === 'email' || column.type === 'phone') return true;
+
+        // 标签类型（select）
+        if (column.type === 'select') return true;
+
+        // 自定义悬浮窗配置
+        if (column.expandPopover) return true;
+
+        // 多行文本（如果内容被截断或有换行）
+        const cellEl = this.renderer.getCellElement(row, col);
+        if (cellEl) {
+            const fullText = cellEl.getAttribute("data-full-text");
+            if (fullText) {
+                const wrapText = column.wrapText;
+                const hasNewlines = fullText.includes("\n");
+                const cellText = cellEl.textContent || "";
+                const hasEllipsis = cellText.includes("...");
+                if (wrapText === "wrap" || hasNewlines || hasEllipsis) return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * 为指定单元格显示对应的悬浮窗
+     * 统一的悬浮窗显示方法，支持所有列类型
+     */
+    private showPopoverForCell(row: number, col: number): void {
+        const column = this.options.columns[col];
+        if (!column) return;
+
+        const cellValue = this.dataModel.getCellValue(row, col);
+        if (!cellValue) return;
+
+        const rowData = this.dataModel.getRowData(row) || {};
+        const cellEl = this.renderer.getCellElement(row, col);
+        if (!cellEl) return;
+
+        // 根据列类型显示对应的悬浮窗
+        if (column.type === 'file') {
+            this.showFilePreview(cellEl, cellValue, row, col);
+        } else if (column.type === 'link' || column.type === 'email' || column.type === 'phone') {
+            showPopover(cellEl, cellValue, rowData, {
+                type: column.type,
+                valueField: column.key,
+            }, {
+                type: column.type,
+                column,
+                cellValue,
+                rowData
+            });
+        } else if (column.type === 'select') {
+            showPopover(cellEl, cellValue, rowData, {
+                type: 'tags',
+                tagsField: column.key,
+                tagOptions: column.options?.map(opt => ({
+                    value: opt.value,
+                    label: opt.label,
+                    color: opt.color,
+                    textColor: opt.textColor
+                })) || [],
+                multiple: column.multiple ?? false,
+                onChange: (newValue: any) => {
+                    this.dataModel.setCellValue(row, col, newValue);
+                    this.renderer.render();
+                    this.emit("data:change", {
+                        type: "set",
+                        changes: [{
+                            row,
+                            col,
+                            oldValue: cellValue,
+                            newValue
+                        }]
+                    });
+                }
+            }, {
+                type: 'select',
+                column,
+                cellValue,
+                rowData
+            });
+        } else if (column.expandPopover) {
+            showPopover(cellEl, cellValue, rowData, column.expandPopover, {
+                type: 'custom',
+                column,
+                cellValue,
+                rowData,
+                expandPopover: column.expandPopover
+            });
+        } else {
+            // 多行文本
+            const fullText = cellEl.getAttribute("data-full-text");
+            if (fullText) {
+                const wrapText = column.wrapText;
+                const hasNewlines = fullText.includes("\n");
+                const cellText = cellEl.textContent || "";
+                const hasEllipsis = cellText.includes("...");
+                if (wrapText === "wrap" || hasNewlines || hasEllipsis) {
+                    showPopover(cellEl, fullText, rowData, {
+                        type: 'text',
+                        content: fullText,
+                        width: column.width,
+                        maxWidth: 400
+                    }, {
+                        type: 'text',
+                        column,
+                        cellValue: fullText,
+                        rowData
+                    });
+                }
+            }
         }
     }
 

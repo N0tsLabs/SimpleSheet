@@ -55,3 +55,7 @@ export type { TagsPopoverOptions } from './TagsPopover';
 export { showFileUploadDialog, closeFileUploadDialog } from './FileUploadDialog';
 export type { FileUploadDialogOptions } from './FileUploadDialog';
 
+// 自定义悬浮窗
+export { showPopover, hidePopover, closePopover, setPopoverDblClickHandler, getCurrentPopoverConfig, getCurrentPopoverCell } from './CustomPopover';
+export type { PopoverShowConfig } from './CustomPopover';
+
