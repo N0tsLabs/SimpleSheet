@@ -615,6 +615,30 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             addEvent(document, "mouseup", this.handleMouseUp.bind(this))
         );
 
+        // 全局点击事件 - 用于关闭文件预览悬浮窗
+        const handleGlobalClick = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            
+            // 如果点击的是文件预览浮层或其内部，不处理
+            if (this.currentFilePreview && this.currentFilePreview.contains(target)) {
+                return;
+            }
+            
+            // 如果点击的是对应的单元格，不处理（让 mousedown 处理）
+            if (this.currentFilePreviewCell && this.currentFilePreviewCell.contains(target)) {
+                return;
+            }
+            
+            // 否则关闭文件预览
+            if (this.currentFilePreview) {
+                this.closeFilePreview();
+            }
+        };
+        
+        this.cleanupFns.push(
+            addEvent(document, "click", handleGlobalClick)
+        );
+
         // 键盘事件
         this.keyboardManager.on("keydown", (e: KeyboardEvent) => {
             // 任何键盘操作都关闭悬浮窗
@@ -867,8 +891,35 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         });
 
         // 文件粘贴事件
+        this.filePasteHandler.on("paste:start", ({ files, row, col }) => {
+            Toast.info(`开始上传 ${files.length} 个文件...`, 2000);
+            this.emit("file:paste:start" as any, { files, row, col });
+        });
+
         this.filePasteHandler.on("paste:complete", ({ file, result, row, col }) => {
+            Toast.success(`文件 "${file.name}" 上传成功`, 2000);
             this.emit("file:paste" as any, { file, result, row, col });
+            
+            // 如果当前有打开的文件预览浮层，且是同一个单元格，刷新预览
+            if (this.currentFilePreview && this.currentFilePreviewCell) {
+                const previewRow = parseInt(this.currentFilePreviewCell.dataset.row || "-1");
+                const previewCol = parseInt(this.currentFilePreviewCell.dataset.col || "-1");
+                if (previewRow === row && previewCol === col) {
+                    // 重新获取单元格值
+                    const newValue = this.dataModel.getCellValue(row, col);
+                    // 保存当前单元格元素引用
+                    const cellEl = this.currentFilePreviewCell;
+                    // 关闭旧预览
+                    this.closeFilePreview();
+                    // 立即重新打开预览（使用新的值）
+                    this.showFilePreview(cellEl, newValue, row, col);
+                }
+            }
+        });
+
+        this.filePasteHandler.on("paste:error", ({ file, error }) => {
+            Toast.error(`文件 "${file.name}" 上传失败: ${error.message}`, 3000);
+            this.emit("file:paste:error" as any, { file, error });
         });
     }
 
@@ -898,16 +949,8 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             return;
         }
 
-        // 检查是否点击了图片预览
-        const previewImg = target.closest(".ss-cell-file-img") as HTMLElement;
-        if (previewImg) {
-            const previewUrl = previewImg.getAttribute("data-preview-url");
-            if (previewUrl) {
-                e.stopPropagation();
-                showImagePreview(previewUrl, previewImg.getAttribute("alt") || undefined);
-                return;
-            }
-        }
+        // 注意：文件单元格的点击统一在下面的 cell:click 事件中处理
+        // 不再单独处理图片预览，而是统一打开悬浮窗
 
         // 检查是否点击了复选框 - 复选框自己处理点击，不触发双击编辑
         const checkbox = target.closest(".ss-checkbox") as HTMLElement;
@@ -1345,14 +1388,20 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             return;
         }
 
-        // 标准化文件值
-        let files: Array<{ url: string; name?: string }> = [];
+        // 标准化文件值 - 修复 [object Object] 显示问题
+        let files: Array<{ url: string; name?: string; type?: string }> = [];
 
         if (Array.isArray(value)) {
             files = value
                 .map((v) => {
                     if (typeof v === "object" && v !== null) {
-                        return { url: v.url || "", name: v.name };
+                        // 确保 name 是字符串类型
+                        const name = v.name ? String(v.name) : undefined;
+                        return { 
+                            url: v.url || "", 
+                            name,
+                            type: v.type
+                        };
                     }
                     return { url: String(v || "") };
                 })
@@ -1362,50 +1411,241 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                 .split(",")
                 .map((url) => ({ url: url.trim() }))
                 .filter((f) => f.url);
+        } else if (typeof value === "object" && value !== null) {
+            // 处理单个对象值的情况
+            const name = value.name ? String(value.name) : undefined;
+            files = [{ 
+                url: value.url || "", 
+                name,
+                type: value.type
+            }].filter((f) => f.url);
         } else if (value) {
             files = [{ url: String(value) }];
         }
 
-        if (files.length === 0) {
-            return;
-        }
+        // 获取列配置
+        const column = this.options.columns[col];
+        const isReadonly = this.options.readonly || column?.readonly === true;
 
         // 创建文件预览浮层
         const overlay = createElement("div", "ss-cell-file-preview");
 
+        // 标题栏（包含标题和操作按钮）
+        const header = createElement("div", "ss-file-preview-header");
+        setStyles(header, {
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "10px 12px",
+            borderBottom: "1px solid #e8e8e8",
+        });
+
         // 标题
         const title = createElement("div", "ss-file-preview-title");
         title.textContent = `文件列表 (${files.length})`;
-        overlay.appendChild(title);
+        header.appendChild(title);
+
+        // 添加按钮（非只读模式下显示）
+        if (!isReadonly) {
+            const addBtn = createElement("button", "ss-file-preview-add-btn");
+            addBtn.innerHTML = "+";
+            addBtn.title = "添加文件";
+            setStyles(addBtn, {
+                width: "24px",
+                height: "24px",
+                borderRadius: "4px",
+                border: "1px solid #d9d9d9",
+                backgroundColor: "#fff",
+                cursor: "pointer",
+                fontSize: "16px",
+                lineHeight: "1",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#666",
+            });
+            addBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                this.showFileUploadDialog(row, col);
+            });
+            header.appendChild(addBtn);
+        }
+
+        overlay.appendChild(header);
 
         // 文件列表
         const fileList = createElement("div", "ss-file-preview-list");
-        files.forEach((file, index) => {
-            const fileItem = createElement("div", "ss-file-preview-item");
-
-            // 文件图标
-            const icon = createElement("span", "ss-file-preview-icon");
-            icon.textContent = "📎";
-            fileItem.appendChild(icon);
-
-            // 文件名或URL
-            const name = createElement("span", "ss-file-preview-name");
-            name.textContent = file.name || file.url.split("/").pop() || `文件 ${index + 1}`;
-            name.title = file.url;
-            fileItem.appendChild(name);
-
-            // 点击打开链接
-            fileItem.style.cursor = "pointer";
-            fileItem.addEventListener("click", (e) => {
-                e.stopPropagation();
-                // 先关闭预览和悬浮窗，再打开链接
-                this.closeFilePreview();
-                hidePopover();
-                window.open(file.url, "_blank", "noopener,noreferrer");
+        
+        if (files.length === 0) {
+            // 空状态提示
+            const emptyTip = createElement("div", "ss-file-preview-empty");
+            emptyTip.textContent = "暂无文件，点击 + 添加";
+            setStyles(emptyTip, {
+                padding: "20px",
+                textAlign: "center",
+                color: "#999",
+                fontSize: "13px",
             });
+            fileList.appendChild(emptyTip);
+        } else {
+            files.forEach((file, index) => {
+                const fileItem = createElement("div", "ss-file-preview-item");
+                setStyles(fileItem, {
+                    display: "flex",
+                    alignItems: "center",
+                    padding: "8px 12px",
+                    gap: "8px",
+                    cursor: "pointer",
+                    transition: "background-color 0.2s",
+                });
+                fileItem.addEventListener("mouseenter", () => {
+                    setStyles(fileItem, { backgroundColor: "#f5f5f5" });
+                });
+                fileItem.addEventListener("mouseleave", () => {
+                    setStyles(fileItem, { backgroundColor: "transparent" });
+                });
 
-            fileList.appendChild(fileItem);
-        });
+                // 判断是否为图片类型
+                const isImage = file.type?.startsWith("image/") ||
+                               /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(file.name || file.url);
+                
+                if (isImage) {
+                    // 图片类型：显示缩略图
+                    const thumbnail = createElement("img", "ss-file-preview-thumbnail");
+                    thumbnail.src = file.url;
+                    thumbnail.alt = file.name || "图片";
+                    setStyles(thumbnail, {
+                        width: "40px",
+                        height: "40px",
+                        objectFit: "cover",
+                        borderRadius: "4px",
+                        flexShrink: "0",
+                        backgroundColor: "#f5f5f5",
+                    });
+                    // 图片加载失败时显示默认图标
+                    thumbnail.addEventListener("error", () => {
+                        thumbnail.style.display = "none";
+                        const fallbackIcon = createElement("span", "ss-file-preview-icon");
+                        fallbackIcon.textContent = "🖼️";
+                        setStyles(fallbackIcon, {
+                            fontSize: "24px",
+                            flexShrink: "0",
+                            width: "40px",
+                            height: "40px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                        });
+                        fileItem.insertBefore(fallbackIcon, thumbnail);
+                    });
+                    fileItem.appendChild(thumbnail);
+                } else {
+                    // 非图片类型：显示图标
+                    const icon = createElement("span", "ss-file-preview-icon");
+                    icon.textContent = this.getFileIcon(file.type, file.name);
+                    setStyles(icon, {
+                        fontSize: "24px",
+                        flexShrink: "0",
+                        width: "40px",
+                        height: "40px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                    });
+                    fileItem.appendChild(icon);
+                }
+
+                // 文件名或URL
+                const name = createElement("span", "ss-file-preview-name");
+                // 修复：确保文件名是字符串
+                const displayName = file.name 
+                    ? String(file.name) 
+                    : (file.url.split("/").pop() || `文件 ${index + 1}`);
+                name.textContent = displayName;
+                name.title = file.url;
+                setStyles(name, {
+                    flex: "1",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    fontSize: "13px",
+                    color: "#333",
+                });
+                fileItem.appendChild(name);
+
+                // 删除按钮（非只读模式下显示）
+                if (!isReadonly) {
+                    const deleteBtn = createElement("button", "ss-file-preview-delete-btn");
+                    deleteBtn.innerHTML = "×";
+                    deleteBtn.title = "删除";
+                    setStyles(deleteBtn, {
+                        width: "20px",
+                        height: "20px",
+                        borderRadius: "4px",
+                        border: "none",
+                        backgroundColor: "transparent",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                        lineHeight: "1",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "#999",
+                        opacity: "0",
+                        transition: "opacity 0.2s",
+                    });
+                    deleteBtn.addEventListener("mouseenter", () => {
+                        setStyles(deleteBtn, { 
+                            backgroundColor: "#ff4d4f",
+                            color: "#fff",
+                        });
+                    });
+                    deleteBtn.addEventListener("mouseleave", () => {
+                        setStyles(deleteBtn, { 
+                            backgroundColor: "transparent",
+                            color: "#999",
+                        });
+                    });
+                    deleteBtn.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        this.deleteFileFromCell(row, col, index);
+                    });
+                    fileItem.appendChild(deleteBtn);
+
+                    // 鼠标悬停时显示删除按钮
+                    fileItem.addEventListener("mouseenter", () => {
+                        setStyles(deleteBtn, { opacity: "1" });
+                    });
+                    fileItem.addEventListener("mouseleave", () => {
+                        setStyles(deleteBtn, { opacity: "0" });
+                    });
+                }
+
+                // 点击处理：图片先预览，非图片直接跳转
+                fileItem.addEventListener("click", (e) => {
+                    // 如果点击的是删除按钮，不处理
+                    if ((e.target as HTMLElement).closest(".ss-file-preview-delete-btn")) {
+                        return;
+                    }
+                    e.stopPropagation();
+                    
+                    // 判断是否为图片
+                    const isImage = file.type?.startsWith("image/") ||
+                                   /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(file.name || file.url);
+                    
+                    if (isImage) {
+                        // 图片类型：先打开图片预览
+                        showImagePreview(file.url, file.name || "图片");
+                    } else {
+                        // 非图片类型：直接跳转链接
+                        window.open(file.url, "_blank", "noopener,noreferrer");
+                    }
+                });
+
+                fileList.appendChild(fileItem);
+            });
+        }
+        
         overlay.appendChild(fileList);
 
         // 定位浮层
@@ -1419,9 +1659,13 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                 top: `${cellRect.bottom + 4}px`,
                 left: `${cellRect.left}px`,
                 zIndex: "1000",
-                minWidth: `${Math.max(cellRect.width, 200)}px`,
+                minWidth: `${Math.max(cellRect.width, 240)}px`,
                 maxWidth: "400px",
-                maxHeight: "300px"
+                maxHeight: "320px",
+                backgroundColor: "#fff",
+                borderRadius: "8px",
+                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+                overflow: "hidden",
             });
         }
 
@@ -1441,6 +1685,176 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             this.currentFilePreview.remove();
             this.currentFilePreview = null;
             this.currentFilePreviewCell = null;
+        }
+    }
+
+    /**
+     * 获取文件图标
+     */
+    private getFileIcon(type?: string, name?: string): string {
+        if (type) {
+            if (type.startsWith("image/")) return "🖼️";
+            if (type.includes("pdf")) return "📄";
+            if (type.includes("word") || type.includes("document")) return "📝";
+            if (type.includes("excel") || type.includes("spreadsheet")) return "📊";
+            if (type.includes("powerpoint") || type.includes("presentation")) return "📽️";
+            if (type.includes("zip") || type.includes("rar")) return "📦";
+            if (type.startsWith("video/")) return "🎬";
+            if (type.startsWith("audio/")) return "🎵";
+        }
+        
+        if (name) {
+            const ext = name.split(".").pop()?.toLowerCase();
+            switch (ext) {
+                case "jpg":
+                case "jpeg":
+                case "png":
+                case "gif":
+                case "webp":
+                case "svg": return "🖼️";
+                case "pdf": return "📄";
+                case "doc":
+                case "docx": return "📝";
+                case "xls":
+                case "xlsx": return "📊";
+                case "ppt":
+                case "pptx": return "📽️";
+                case "zip":
+                case "rar":
+                case "7z": return "📦";
+                case "mp4":
+                case "avi":
+                case "mov": return "🎬";
+                case "mp3":
+                case "wav": return "🎵";
+            }
+        }
+        
+        return "📎";
+    }
+
+    /**
+     * 从单元格删除文件
+     */
+    private deleteFileFromCell(row: number, col: number, fileIndex: number): void {
+        const currentValue = this.dataModel.getCellValue(row, col);
+        let newValue: any;
+
+        if (Array.isArray(currentValue)) {
+            // 从数组中删除指定索引的文件
+            const newArray = [...currentValue];
+            newArray.splice(fileIndex, 1);
+            newValue = newArray.length > 0 ? newArray : null;
+        } else if (typeof currentValue === "string" && currentValue.includes(",")) {
+            // 处理逗号分隔的字符串
+            const urls = currentValue.split(",").map(u => u.trim()).filter(u => u);
+            urls.splice(fileIndex, 1);
+            newValue = urls.length > 0 ? urls.join(",") : null;
+        } else {
+            // 单个值直接清空
+            newValue = null;
+        }
+
+        // 更新单元格值
+        this.dataModel.setCellValue(row, col, newValue);
+        this.renderer.refreshCell(row, col);
+
+        // 触发数据变更事件
+        this.emit("data:change", {
+            type: "set",
+            changes: [{
+                row,
+                col,
+                oldValue: currentValue,
+                newValue,
+            }],
+        });
+
+        // 刷新文件预览
+        this.closeFilePreview();
+        const cellEl = this.renderer.getCellElement(row, col);
+        if (cellEl) {
+            this.showFilePreview(cellEl, newValue, row, col);
+        }
+    }
+
+    /**
+     * 显示文件上传弹窗
+     */
+    private showFileUploadDialog(row: number, col: number): void {
+        const column = this.options.columns[col];
+        const fileUploadConfig = (column as any)?.fileUpload;
+        
+        // 动态导入以避免循环依赖
+        import("../plugins/FileUploadDialog").then(({ showFileUploadDialog }) => {
+            showFileUploadDialog({
+                accept: fileUploadConfig?.accept || ['image/*', 'application/pdf', '.doc', '.docx', '.xls', '.xlsx'],
+                maxFileSize: fileUploadConfig?.maxSize || 10 * 1024 * 1024,
+                maxFiles: 10,
+                onUpload: fileUploadConfig?.onUpload ? 
+                    async (file: File) => {
+                        const url = await fileUploadConfig.onUpload!(file);
+                        return { url, name: file.name, size: file.size, type: file.type };
+                    } : undefined,
+                onSuccess: (results: any[]) => {
+                    this.addFilesToCell(row, col, results);
+                },
+                theme: this.options.theme === "dark" ? "dark" : "light",
+            });
+        });
+    }
+
+    /**
+     * 添加文件到单元格
+     */
+    private addFilesToCell(row: number, col: number, results: Array<{ url: string; name?: string; size?: number; type?: string }>): void {
+        if (results.length === 0) return;
+
+        const currentValue = this.dataModel.getCellValue(row, col);
+        let newValue: any;
+
+        // 构建新文件对象数组
+        const newFiles = results.map(r => ({
+            url: r.url,
+            name: r.name,
+            size: r.size,
+            type: r.type,
+        }));
+
+        if (Array.isArray(currentValue)) {
+            // 追加到现有数组
+            newValue = [...currentValue, ...newFiles];
+        } else if (currentValue && typeof currentValue === "object" && currentValue.url) {
+            // 将单个对象转为数组
+            newValue = [currentValue, ...newFiles];
+        } else if (typeof currentValue === "string" && currentValue) {
+            // 字符串转为数组
+            newValue = [currentValue, ...newFiles.map(f => f.url)];
+        } else {
+            // 新建
+            newValue = newFiles.length === 1 ? newFiles[0] : newFiles;
+        }
+
+        // 更新单元格值
+        this.dataModel.setCellValue(row, col, newValue);
+        this.renderer.refreshCell(row, col);
+
+        // 触发数据变更事件
+        this.emit("data:change", {
+            type: "set",
+            changes: [{
+                row,
+                col,
+                oldValue: currentValue,
+                newValue,
+            }],
+        });
+
+        // 刷新文件预览
+        this.closeFilePreview();
+        const cellEl = this.renderer.getCellElement(row, col);
+        if (cellEl) {
+            this.showFilePreview(cellEl, newValue, row, col);
         }
     }
 

@@ -142,6 +142,10 @@ export interface Column {
   /** 日期格式（type 为 date 时使用） */
   dateFormat?: string;
 
+  // ===== 文件类型配置 =====
+  /** 文件上传配置（type 为 file 时使用） */
+  fileUpload?: FileUploadConfig;
+
   // ===== 右键菜单配置 =====
   /** 右键菜单配置（可选） */
   contextMenu?: ColumnContextMenuConfig;
@@ -149,6 +153,33 @@ export interface Column {
   // ===== 自定义悬浮窗配置 =====
   /** 自定义悬浮窗配置（点击单元格时显示） */
   expandPopover?: ExpandPopoverConfig;
+}
+
+/**
+ * 文件上传配置
+ */
+export interface FileUploadConfig {
+  /**
+   * 自定义文件上传函数
+   * 返回 Promise，resolve 时传入文件的 URL
+   * 如果提供此函数，将使用自定义上传而非默认上传
+   */
+  onUpload?: (file: File) => Promise<string>;
+  
+  /** 允许的文件类型（MIME 类型或扩展名，如 ['image/*', '.pdf']） */
+  accept?: string[];
+  
+  /** 最大文件大小（字节），默认 10MB */
+  maxSize?: number;
+  
+  /** 是否允许多选 */
+  multiple?: boolean;
+  
+  /** 上传按钮文本 */
+  uploadText?: string;
+  
+  /** 拖拽区域提示文本 */
+  dragText?: string;
 }
 
 /**

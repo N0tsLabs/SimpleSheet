@@ -258,8 +258,6 @@ export class FilePasteHandler extends EventEmitter<FilePasteEvents> {
 
         // 上传文件
         const result = await this.uploader.upload(file);
-        
-        this.emit('paste:complete', { file, result, row, col });
 
         // 根据列类型决定如何存储
         if (columnType === 'file') {
@@ -278,6 +276,9 @@ export class FilePasteHandler extends EventEmitter<FilePasteEvents> {
           }
           
           this.options.setCellValue(row, col, newValue);
+          
+          // 在数据更新后再触发完成事件
+          this.emit('paste:complete', { file, result, row, col });
         } else if (columnType === 'link') {
           // 链接类型：存储 URL
           let newValue: any;
@@ -291,9 +292,15 @@ export class FilePasteHandler extends EventEmitter<FilePasteEvents> {
           }
           
           this.options.setCellValue(row, col, newValue);
+          
+          // 在数据更新后再触发完成事件
+          this.emit('paste:complete', { file, result, row, col });
         } else {
           // 其他类型：只存储 URL
           this.options.setCellValue(row, col, result.url);
+          
+          // 在数据更新后再触发完成事件
+          this.emit('paste:complete', { file, result, row, col });
         }
 
       } catch (error) {

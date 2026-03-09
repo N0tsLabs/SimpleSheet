@@ -51,3 +51,7 @@ export type { LinkPopoverOptions } from './LinkPopover';
 export { showTagsPopover, closeTagsPopover } from './TagsPopover';
 export type { TagsPopoverOptions } from './TagsPopover';
 
+// 文件上传弹窗
+export { showFileUploadDialog, closeFileUploadDialog } from './FileUploadDialog';
+export type { FileUploadDialogOptions } from './FileUploadDialog';
+

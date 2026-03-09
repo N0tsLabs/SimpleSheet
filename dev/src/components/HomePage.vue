@@ -51,7 +51,24 @@ const tagOptions = [
 // 列定义
 const columns = ref<Column[]>([
   { key: 'id', title: 'ID', width: 60, type: 'number' as const, readonly: true, sortable: true },
-  { key: 'avatar', title: '头像', width: 80, type: 'file' as const },
+  { 
+    key: 'avatar', 
+    title: '头像', 
+    width: 80, 
+    type: 'file' as const,
+    // 文件列配置示例：限制只能上传图片，最大5MB
+    fileUpload: {
+      accept: ['image/*'],
+      maxSize: 30 * 1024 * 1024,
+      // 自定义上传函数示例（可选）
+      // onUpload: async (file) => {
+      //   // 这里可以调用自己的上传接口
+      //   // const url = await uploadToYourServer(file);
+      //   // return url;
+      //   return URL.createObjectURL(file);
+      // },
+    },
+  },
   { key: 'name', title: '姓名', width: 100, sortable: true },
   { key: 'department', title: '部门', width: 110, type: 'select' as const, options: departmentOptions, sortable: true },
   { key: 'status', title: '状态', width: 100, type: 'select' as const, options: statusOptions },
@@ -208,6 +225,17 @@ const initSheet = async () => {
   sheet.on('paste', () => log('已粘贴'));
   sheet.on('row:insert', () => {});
   sheet.on('row:delete', () => {});
+
+  // 文件上传事件
+  sheet.on('file:paste:start', (e: any) => {
+    log(`📤 开始上传 ${e.files.length} 个文件到行${e.row + 1}`);
+  });
+  sheet.on('file:paste', (e: any) => {
+    log(`✅ 文件上传成功: ${e.result.name}`);
+  });
+  sheet.on('file:paste:error', (e: any) => {
+    log(`❌ 文件上传失败: ${e.file.name} - ${e.error.message}`);
+  });
 
   // 列隐藏/显示事件
   sheet.on('column:hide', (e) => {

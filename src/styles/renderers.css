@@ -383,6 +383,23 @@
   cursor: help;
 }
 
+/* 文件数量徽章（点点样式） */
+.ss-cell-file-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--ss-text-secondary, #6b7280);
+  margin-left: 2px;
+  flex-shrink: 0;
+  cursor: help;
+  font-weight: 500;
+}
+
+[data-theme="dark"] .ss-cell-file-count-badge {
+  color: var(--ss-text-secondary, #9ca3af);
+}
+
 /* ========================================
    选择/标签渲染器样式
    ======================================== */

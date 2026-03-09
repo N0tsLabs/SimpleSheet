@@ -46,58 +46,47 @@ export class FileRenderer extends BaseRenderer {
     }
 
     const container = createElement('div', 'ss-cell-files');
+    
+    // 只显示第一个文件，其他通过数量徽章显示
+    const firstFile = files[0];
+    const remainingCount = files.length - 1;
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      if (!file.url) continue;
-
-      const isImage = this.isImageUrl(file.url, file.type);
+    if (firstFile && firstFile.url) {
+      const isImage = this.isImageUrl(firstFile.url, firstFile.type);
       
       if (isImage) {
-        // 图片预览
+        // 图片预览 - 使用固定大小的缩略图
         const imgWrapper = createElement('div', 'ss-cell-file-img-wrapper');
         const img = createElement('img', 'ss-cell-file-img') as HTMLImageElement;
-        img.src = file.url;
-        img.alt = file.name || '图片';
-        img.title = file.name || '点击查看大图';
-        // 存储图片URL到data属性，用于事件委托
-        img.setAttribute('data-preview-url', file.url);
+        img.src = firstFile.url;
+        img.alt = firstFile.name || '图片';
+        img.title = firstFile.name || '点击查看';
+        // 不再直接预览，统一走悬浮窗
+        img.style.pointerEvents = 'none';
         
         imgWrapper.appendChild(img);
         container.appendChild(imgWrapper);
       } else {
-        // 文件链接
-        const fileLink = createElement('a', 'ss-cell-file-link');
-        fileLink.href = file.url;
-        fileLink.target = '_blank';
-        fileLink.rel = 'noopener noreferrer';
-        fileLink.title = file.name || file.url;
-        
-        // 文件图标
-        const icon = createElement('span', 'ss-cell-file-icon');
-        icon.textContent = this.getFileIcon(file.type, file.name);
-        fileLink.appendChild(icon);
-        
-        // 文件名
-        const name = createElement('span', 'ss-cell-file-name');
-        name.textContent = file.name || this.getFileName(file.url);
-        fileLink.appendChild(name);
-        
-        // 阻止链接点击时触发单元格选择
-        fileLink.addEventListener('click', (e) => {
-          e.stopPropagation();
-        });
-
-        container.appendChild(fileLink);
+        // 非图片文件 - 只显示图标
+        const fileIcon = createElement('div', 'ss-cell-file-icon-only');
+        fileIcon.textContent = this.getFileIcon(firstFile.type, firstFile.name);
+        fileIcon.title = firstFile.name || this.getFileName(firstFile.url);
+        container.appendChild(fileIcon);
       }
     }
 
-    // 如果有多个文件，显示数量标签
-    if (files.length > 1) {
-      const badge = createElement('span', 'ss-cell-multi-badge');
-      badge.textContent = `${files.length}`;
-      badge.title = files.map(f => f.name || f.url).join('\n');
-      container.appendChild(badge);
+    // 如果有更多文件，显示数量徽章（点点样式）
+    if (remainingCount > 0) {
+      const moreBadge = createElement('span', 'ss-cell-file-count-badge');
+      moreBadge.textContent = `•${remainingCount + 1}`;
+      moreBadge.title = `共 ${remainingCount + 1} 个文件`;
+      container.appendChild(moreBadge);
+    } else if (files.length === 1 && !this.isImageUrl(firstFile.url, firstFile.type)) {
+      // 单个非图片文件，显示文件名
+      const nameLabel = createElement('span', 'ss-cell-file-name-label');
+      nameLabel.textContent = firstFile.name || this.getFileName(firstFile.url);
+      nameLabel.title = firstFile.name || firstFile.url;
+      container.appendChild(nameLabel);
     }
 
     cell.appendChild(container);

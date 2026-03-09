@@ -140,3 +140,7 @@ export {
 // 导出提示组件
 export { Toast, showToast } from './utils/Toast';
 export type { ToastType, ToastOptions } from './utils/Toast';
+
+// 导出文件上传弹窗
+export { showFileUploadDialog, closeFileUploadDialog } from './plugins/FileUploadDialog';
+export type { FileUploadDialogOptions } from './plugins/FileUploadDialog';
