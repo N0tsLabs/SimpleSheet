@@ -16,14 +16,13 @@ const md = new MarkdownIt({
 });
 
 // 为 heading 添加 ID (用于 TOC 导航)
+// ID 格式与 Markdown 中的中文锚点一致（如 #快速开始）
 md.renderer.rules.heading_open = function(tokens, idx, options, env, self) {
   const token = tokens[idx];
   const nextToken = tokens[idx + 1];
   const text = nextToken?.content || '';
-  // 使用 slugify 方式生成 ID，支持中文
-  const id = 'doc-' + text.toLowerCase()
-    .replace(/[^\w\u4e00-\u9fa5]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  // 使用与 Markdown 链接一致的 ID 格式（直接使用中文字符）
+  const id = text.trim();
   token.attrSet('id', id);
   return self.renderToken(tokens, idx, options);
 };
@@ -40,16 +39,25 @@ const isActive = (id: string): boolean => {
 };
 
 // TOC 项点击
-const scrollToDocSection = (id: string) => {
+const scrollToDocSection = (id: string, event?: Event) => {
+  // 阻止默认行为和事件冒泡
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  
   activeDocSection.value = id;
   const el = document.getElementById(id);
   if (el) {
-    const headerHeight = 70;
+    // 获取元素相对于文档顶部的位置
     const rect = el.getBoundingClientRect();
-    const absoluteTop = window.scrollY + rect.top;
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    const targetPosition = rect.top + scrollTop - 80; // 80px 是导航栏高度 + 间距
+    
+    // 使用 window.scrollTo 滚动到目标位置
     window.scrollTo({
-      top: absoluteTop - headerHeight,
-      behavior: 'smooth',
+      top: targetPosition,
+      behavior: 'smooth'
     });
   }
 };
@@ -59,10 +67,11 @@ const goHome = () => {
   emit('go-home');
 };
 
-// 加载文档
+// 加载文档 - 从根目录的 docs/GUIDE.md 加载
 const loadDocumentation = async () => {
   docLoading.value = true;
   try {
+    // 使用绝对路径从根目录加载文档
     const response = await fetch('/docs/GUIDE.md');
     if (response.ok) {
       const rawContent = await response.text();
@@ -86,10 +95,8 @@ const extractToc = (content: string) => {
   while ((match = headingRegex.exec(content)) !== null) {
     const level = match[1].length;
     const text = match[2].trim();
-    // 生成与 markdown-it 渲染一致的 ID（支持中文）
-    const id = 'doc-' + text.toLowerCase()
-      .replace(/[^\w\u4e00-\u9fa5]+/g, '-')
-      .replace(/^-+|-+$/g, '');
+    // 使用与 Markdown 链接一致的 ID 格式（直接使用中文字符）
+    const id = text;
     toc.push({ id, text, level });
   }
 
@@ -127,7 +134,7 @@ onMounted(() => {
               v-for="item in docToc"
               :key="item.id"
               :class="['toc-item', 'toc-level-' + item.level, { active: isActive(item.id) }]"
-              @click="scrollToDocSection(item.id)"
+              @click.prevent="scrollToDocSection(item.id, $event)"
             >
               {{ item.text }}
             </li>

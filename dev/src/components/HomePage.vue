@@ -704,6 +704,28 @@ const initSheet = async () => {
   sheet.on('file:paste:error', (e) => {
     console.error('文件上传失败:', e.file.name, e.error.message);
   });
+  
+  // 列隐藏/显示事件
+  sheet.on('column:hide', (e) => {
+    console.log('隐藏列：', columns.value[e.index]?.title || '列' + (e.index + 1));
+  });
+  
+  sheet.on('column:show', (e) => {
+    console.log('显示列：', columns.value[e.index]?.title || '列' + (e.index + 1));
+  });
+  
+  // 排序事件
+  sheet.on('sort:change', (e) => {
+    const colName = columns.value[e.column]?.title || '列' + (e.column + 1);
+    const direction = e.direction === 'asc' ? '升序' : (e.direction === 'desc' ? '降序' : '取消');
+    console.log('排序：', colName, '-', direction);
+  });
+  
+  // 配置变更事件
+  sheet.on('config:change', (e) => {
+    console.log('配置变更类型:', e.type);
+    console.log('变更详情:', e.detail);
+  });
 };
 
 onMounted(() => {

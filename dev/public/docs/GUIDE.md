@@ -119,6 +119,30 @@ interface SheetOptions {
   /** 预计算的行高（用于 wrapText 模式） */
   rowHeights?: Map<number, number>;
 
+  /** ===== 功能开关配置 ===== */
+
+  /** 内置功能开关配置（所有功能默认开启） */
+  features?: {
+    /** 列拖拽排序（默认 true） */
+    columnReorder?: boolean;
+    /** 行拖拽排序（默认 true） */
+    rowReorder?: boolean;
+    /** 列宽调整（默认 true） */
+    columnResize?: boolean;
+    /** 自动填充（默认 true） */
+    autoFill?: boolean;
+    /** 排序功能（默认 true） */
+    sorter?: boolean;
+    /** 筛选功能（默认 true） */
+    filter?: boolean;
+    /** 搜索功能（默认 true） */
+    search?: boolean;
+    /** 数据验证（默认 true） */
+    validator?: boolean;
+    /** 文件粘贴处理（默认 true） */
+    filePaste?: boolean;
+  };
+
   /** ===== 右键菜单配置 ===== */
 
   /** 启用右键菜单（默认 true） */
@@ -1021,6 +1045,11 @@ sheet.on('column:resize', (e) => {});     // 调整列宽
 sheet.on('column:insert', (e) => {});     // 插入列
 sheet.on('column:delete', (e) => {});      // 删除列
 sheet.on('column:select', (e) => {});      // 选择列
+sheet.on('column:hide', (e) => {});        // 隐藏列
+sheet.on('column:show', (e) => {});        // 显示列
+
+// 行排序事件
+sheet.on('row:reorder', (e) => {});        // 行拖拽排序
 
 // 排序事件
 sheet.on('sort:change', (e) => {
@@ -1044,7 +1073,20 @@ sheet.on('fill', (e) => {
 
 // 剪贴板事件
 sheet.on('copy', (e) => {});              // 复制
+sheet.on('cut', (e) => {});               // 剪切
 sheet.on('paste', (e) => {});              // 粘贴
+
+// 文件上传事件（从剪贴板粘贴文件）
+sheet.on('file:paste:start', (e) => {});  // 开始上传文件
+sheet.on('file:paste', (e) => {});        // 文件上传成功
+sheet.on('file:paste:error', (e) => {});  // 文件上传失败
+
+// 右键菜单事件
+sheet.on('header:contextmenu', (e) => {});     // 表头右键菜单
+sheet.on('rowNumber:contextmenu', (e) => {});  // 行号右键菜单
+
+// 配置变更事件
+sheet.on('config:change', (e) => {});     // 配置变更（排序、列宽调整、列顺序调整等）
 
 // 历史事件
 sheet.on('undo', (e) => {});              // 撤销
@@ -1094,6 +1136,62 @@ interface SortCustomEvent {
   preventDefault: () => void;  // 阻止默认排序行为
   getData: () => RowData[];    // 获取当前数据
 }
+
+interface ColumnHideEvent {
+  index: number;               // 列索引
+  column: Column;              // 列配置
+}
+
+interface ColumnShowEvent {
+  index: number;               // 列索引
+  column: Column;              // 列配置
+}
+
+interface RowReorderEvent {
+  fromIndex: number;           // 原始行索引
+  toIndex: number;             // 目标行索引
+}
+
+interface CutEvent {
+  data: any[][];               // 剪切的数据
+  ranges: SelectionRange[];    // 选区范围
+}
+
+interface FilePasteStartEvent {
+  files: File[];               // 文件列表
+  row: number;                 // 目标行索引
+  col: number;                 // 目标列索引
+}
+
+interface FilePasteEvent {
+  file: File;                  // 上传的文件
+  result: { name: string; url: string; size: number; type: string };  // 上传结果
+  row: number;                 // 目标行索引
+  col: number;                 // 目标列索引
+}
+
+interface FilePasteErrorEvent {
+  file: File;                  // 上传失败的文件
+  error: Error;                // 错误信息
+}
+
+interface HeaderContextMenuEvent {
+  col: number;                 // 列索引
+  originalEvent: MouseEvent;   // 原始鼠标事件
+}
+
+interface RowNumberContextMenuEvent {
+  row: number;                 // 行索引
+  originalEvent: MouseEvent;   // 原始鼠标事件
+}
+
+interface ConfigChangeEvent {
+  type: 'sort' | 'column-resize' | 'column-reorder' | 'column-insert' | 
+        'column-delete' | 'column-hide' | 'column-show' | 
+        'row-reorder' | 'row-insert' | 'row-delete' | 
+        'freeze' | 'merge' | 'filter' | 'load';  // 变更类型
+  detail: any;                 // 变更详情，根据类型不同而变化
+}
 ```
 
 ### 自定义排序事件示例
@@ -1124,6 +1222,95 @@ sheet.on('sort:custom', (e) => {
 // 或者使用 sort:change 事件处理简单排序
 sheet.on('sort:change', (e) => {
   console.log(`列 ${e.column} 排序方式: ${e.direction}`);
+});
+```
+
+### 列隐藏/显示事件示例
+
+```typescript
+// 监听列隐藏事件
+sheet.on('column:hide', (e) => {
+  console.log(`隐藏了第 ${e.index + 1} 列: ${e.column.title}`);
+  // 可以在这里保存用户的列显示偏好
+});
+
+// 监听列显示事件
+sheet.on('column:show', (e) => {
+  console.log(`显示了第 ${e.index + 1} 列: ${e.column.title}`);
+});
+```
+
+### 文件上传事件示例
+
+```typescript
+// 文件开始上传
+sheet.on('file:paste:start', (e) => {
+  console.log(`开始上传 ${e.files.length} 个文件到行${e.row + 1}`);
+  // 显示上传进度提示
+});
+
+// 文件上传成功
+sheet.on('file:paste', (e) => {
+  console.log(`文件上传成功: ${e.result.name}`);
+  console.log(`文件URL: ${e.result.url}`);
+});
+
+// 文件上传失败
+sheet.on('file:paste:error', (e) => {
+  console.error(`文件上传失败: ${e.file.name} - ${e.error.message}`);
+});
+```
+
+### 配置变更事件示例
+
+```typescript
+// 监听所有配置变更
+sheet.on('config:change', (e) => {
+  console.log(`配置变更类型: ${e.type}`);
+  
+  switch (e.type) {
+    case 'column-resize':
+      console.log(`列 ${e.detail.column} 宽度从 ${e.detail.oldWidth}px 调整为 ${e.detail.newWidth}px`);
+      break;
+    case 'column-reorder':
+      console.log(`列从位置 ${e.detail.fromIndex} 移动到 ${e.detail.toIndex}`);
+      break;
+    case 'sort':
+      console.log(`列 ${e.detail.column} 排序方式: ${e.detail.direction}`);
+      break;
+    case 'filter':
+      console.log('筛选条件已变更');
+      break;
+  }
+  
+  // 可以在这里自动保存配置到服务器
+  // saveConfigToServer(sheet.exportConfig());
+});
+```
+
+### 右键菜单事件示例
+
+```typescript
+// 表头右键菜单
+sheet.on('header:contextmenu', (e) => {
+  console.log(`右键点击了第 ${e.col + 1} 列表头`);
+  // 可以在这里显示自定义的列操作菜单
+});
+
+// 行号右键菜单
+sheet.on('rowNumber:contextmenu', (e) => {
+  console.log(`右键点击了第 ${e.row + 1} 行行号`);
+  // 可以在这里显示自定义的行操作菜单
+});
+```
+
+### 行拖拽排序事件示例
+
+```typescript
+// 监听行拖拽排序
+sheet.on('row:reorder', (e) => {
+  console.log(`行从位置 ${e.fromIndex + 1} 移动到 ${e.toIndex + 1}`);
+  // 可以在这里同步更新服务器端的行顺序
 });
 ```
 
