@@ -540,6 +540,7 @@ export interface SheetEventMap {
   'edit:change': EditEvent;
   'edit:end': EditEvent;
   'edit:cancel': EditEvent;
+  'edit:input': EditEvent;
   
   // 数据事件
   'data:change': DataChangeEvent;

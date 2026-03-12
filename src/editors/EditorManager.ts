@@ -16,6 +16,7 @@ interface EditorEvents {
   'change': EditEvent;
   'end': EditEvent;
   'cancel': EditEvent;
+  'input': EditEvent;
 }
 
 interface ActiveEditor {
@@ -130,6 +131,9 @@ export class EditorManager extends EventEmitter<EditorEvents> {
     requestAnimationFrame(() => {
       editor.focus();
     });
+
+    // 监听输入事件
+    this.setupInputListener(editor, row, col, rowData, column);
     
     this.emit('start', {
       row,
@@ -252,6 +256,35 @@ export class EditorManager extends EventEmitter<EditorEvents> {
    */
   private getEditorClass(type: string): CellEditorClass | undefined {
     return this.editorTypes.get(type);
+  }
+
+  /**
+   * 设置输入监听器
+   */
+  private setupInputListener(
+    editor: CellEditor,
+    row: number,
+    col: number,
+    rowData: RowData,
+    column: Column
+  ): void {
+    // 获取编辑器内部的 input 或 textarea 元素
+    const inputElement = (editor as any).input || (editor as any).textarea;
+    if (!inputElement) return;
+
+    const handleInput = () => {
+      const newValue = editor.getValue();
+      this.emit('input', {
+        row,
+        col,
+        oldValue: this.activeEditor?.originalValue,
+        newValue,
+        rowData,
+        column,
+      });
+    };
+
+    inputElement.addEventListener('input', handleInput);
   }
 
   /**

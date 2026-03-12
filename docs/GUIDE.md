@@ -12,10 +12,11 @@
 6. [事件系统](#事件系统)
 7. [主题定制](#主题定制)
 8. [内置渲染器](#内置渲染器)
-9. [内置编辑器](#内置编辑器)
-10. [插件系统](#插件系统)
-11. [快捷键参考](#快捷键参考)
-12. [常见问题](#常见问题)
+9. [文件上传](#文件上传)
+10. [内置编辑器](#内置编辑器)
+11. [插件系统](#插件系统)
+12. [快捷键参考](#快捷键参考)
+13. [常见问题](#常见问题)
 
 ---
 
@@ -1500,6 +1501,377 @@ const columns: Column[] = [
   },
 ];
 ```
+
+---
+
+## 文件上传
+
+SimpleSheet 支持在表格中上传和展示文件附件，包括图片预览、文件链接、多文件管理等功能。
+
+### 基础配置
+
+在列定义中设置 `type: 'file'` 即可启用文件上传功能：
+
+```typescript
+const columns: Column[] = [
+  {
+    key: 'attachments',
+    title: '附件',
+    width: 150,
+    type: 'file',  // 启用文件上传
+    readonly: true, // 通常设置为只读，通过粘贴或弹窗上传
+  },
+];
+```
+
+### 数据格式
+
+文件数据支持以下格式：
+
+```typescript
+// 单个文件对象
+const singleFile = {
+  url: 'https://example.com/file.pdf',
+  name: '文档.pdf',
+  size: 1024000,
+  type: 'application/pdf',
+};
+
+// 多个文件数组
+const multipleFiles = [
+  { url: 'https://example.com/image1.jpg', name: '图片1.jpg', size: 2048000, type: 'image/jpeg' },
+  { url: 'https://example.com/file.docx', name: '文档.docx', size: 512000, type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+];
+
+// 逗号分隔的 URL 字符串（自动解析为多个文件）
+const urlString = 'https://example.com/file1.pdf,https://example.com/file2.jpg';
+
+// 简单 URL 字符串
+const simpleUrl = 'https://example.com/file.pdf';
+```
+
+### 文件上传方式
+
+#### 1. 剪贴板粘贴上传
+
+选中文件类型单元格后，直接粘贴文件（支持截图、复制文件、从文件夹复制）：
+
+```typescript
+const sheet = new SimpleSheet('#container', {
+  columns: [
+    { key: 'attachments', title: '附件', width: 150, type: 'file' },
+  ],
+  data: [],
+  // 配置文件上传处理器
+  fileUploader: {
+    upload: async (file: File) => {
+      // 自定义上传逻辑
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      const result = await response.json();
+      
+      // 返回标准格式
+      return {
+        url: result.url,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+      };
+    },
+  },
+});
+
+// 监听文件粘贴事件
+sheet.on('file:paste:start', (e) => {
+  console.log(`开始上传 ${e.files.length} 个文件`);
+});
+
+sheet.on('file:paste', (e) => {
+  console.log('文件上传成功:', e.result.name, e.result.url);
+});
+
+sheet.on('file:paste:error', (e) => {
+  console.error('文件上传失败:', e.file.name, e.error.message);
+});
+```
+
+#### 2. 拖拽上传
+
+支持将文件直接拖拽到文件类型单元格中进行上传。
+
+#### 3. 使用文件上传弹窗
+
+```typescript
+import { showFileUploadDialog } from '@n0ts123/simple-sheet';
+
+// 显示文件上传弹窗
+showFileUploadDialog({
+  // 允许的文件类型（MIME类型或扩展名）
+  accept: ['image/*', '.pdf', '.doc', '.docx', '.xls', '.xlsx'],
+  
+  // 最大文件大小（字节），默认 10MB
+  maxFileSize: 10 * 1024 * 1024,
+  
+  // 最大文件数量，默认 10
+  maxFiles: 5,
+  
+  // 自定义上传函数
+  onUpload: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    
+    const result = await response.json();
+    
+    return {
+      url: result.url,
+      name: file.name,
+      size: file.size,
+      type: file.type,
+    };
+  },
+  
+  // 上传成功回调
+  onSuccess: (results) => {
+    console.log('上传成功:', results);
+    // results 是 FileUploadResult 数组
+    // 可以在这里更新表格数据
+    sheet.setCellValue(row, col, results);
+  },
+  
+  // 取消回调
+  onCancel: () => {
+    console.log('用户取消上传');
+  },
+  
+  // 主题
+  theme: 'light', // 或 'dark'
+});
+```
+
+### 文件上传弹窗选项
+
+```typescript
+interface FileUploadDialogOptions {
+  /** 允许的文件类型（MIME类型或扩展名） */
+  accept?: string[];
+  
+  /** 最大文件大小（字节） */
+  maxFileSize?: number;
+  
+  /** 最大文件数量 */
+  maxFiles?: number;
+  
+  /** 自定义上传函数 */
+  onUpload?: (file: File) => Promise<FileUploadResult>;
+  
+  /** 上传成功回调 */
+  onSuccess?: (results: FileUploadResult[]) => void;
+  
+  /** 取消回调 */
+  onCancel?: () => void;
+  
+  /** 主题：'light' | 'dark' */
+  theme?: 'light' | 'dark';
+}
+
+interface FileUploadResult {
+  /** 文件访问 URL */
+  url: string;
+  /** 文件名 */
+  name: string;
+  /** 文件大小（字节） */
+  size: number;
+  /** 文件 MIME 类型 */
+  type: string;
+}
+```
+
+### 文件类型支持
+
+系统会自动识别以下文件类型并显示对应图标：
+
+| 文件类型 | 图标 | 说明 |
+|---------|------|------|
+| 图片 | 🖼️ | jpg, jpeg, png, gif, webp, svg, bmp, ico, avif |
+| PDF | 📄 | .pdf |
+| Word | 📝 | .doc, .docx |
+| Excel | 📊 | .xls, .xlsx |
+| PPT | 📽️ | .ppt, .pptx |
+| 压缩包 | 📦 | .zip, .rar, .7z |
+| 视频 | 🎬 | mp4, avi, mov |
+| 音频 | 🎵 | mp3, wav |
+| 其他 | 📎 | 默认图标 |
+
+### 图片预览
+
+文件渲染器会自动识别图片文件并显示缩略图。点击图片可以打开大图预览：
+
+```typescript
+// 图片数据示例
+const imageData = {
+  url: 'https://example.com/photo.jpg',
+  name: '照片.jpg',
+  size: 2048000,
+  type: 'image/jpeg',
+};
+
+// 支持 base64 图片
+const base64Image = {
+  url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...',
+  name: '截图.png',
+  type: 'image/png',
+};
+```
+
+### 多文件管理
+
+当单元格中有多个文件时，系统会显示第一个文件的预览，并在右上角显示文件数量徽章：
+
+```typescript
+// 多文件数据
+const multipleFiles = [
+  { url: 'https://example.com/file1.pdf', name: '文档1.pdf', type: 'application/pdf' },
+  { url: 'https://example.com/file2.jpg', name: '图片2.jpg', type: 'image/jpeg' },
+  { url: 'https://example.com/file3.docx', name: '文档3.docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+];
+
+// 单元格将显示：PDF图标 + "•3" 徽章
+```
+
+### 完整示例
+
+```typescript
+import { SimpleSheet, showFileUploadDialog } from '@n0ts123/simple-sheet';
+import '@n0ts123/simple-sheet/dist/simple-sheet.css';
+
+const sheet = new SimpleSheet('#container', {
+  columns: [
+    { key: 'name', title: '产品名称', width: 150 },
+    { 
+      key: 'attachments', 
+      title: '产品附件', 
+      width: 180,
+      type: 'file',
+      readonly: true, // 禁止直接编辑，通过上传方式添加
+    },
+    { key: 'description', title: '描述', width: 200 },
+  ],
+  data: [
+    {
+      name: '产品 A',
+      attachments: [
+        { url: 'https://example.com/spec-a.pdf', name: '规格书.pdf', size: 1024000, type: 'application/pdf' },
+        { url: 'https://example.com/image-a.jpg', name: '产品图.jpg', size: 2048000, type: 'image/jpeg' },
+      ],
+      description: '高端产品',
+    },
+    {
+      name: '产品 B',
+      attachments: { url: 'https://example.com/manual-b.pdf', name: '说明书.pdf', type: 'application/pdf' },
+      description: '标准产品',
+    },
+  ],
+  
+  // 配置文件上传处理器
+  fileUploader: {
+    upload: async (file) => {
+      // 这里替换为你的实际上传逻辑
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        throw new Error('上传失败');
+      }
+      
+      const result = await response.json();
+      return {
+        url: result.url,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+      };
+    },
+  },
+});
+
+// 添加自定义按钮触发上传弹窗
+document.getElementById('upload-btn')?.addEventListener('click', () => {
+  const selection = sheet.getSelection();
+  if (selection.length > 0) {
+    const { row, col } = selection[0];
+    const column = sheet.getColumns()[col];
+    
+    if (column.type === 'file') {
+      showFileUploadDialog({
+        accept: ['image/*', '.pdf', '.doc', '.docx'],
+        maxFileSize: 5 * 1024 * 1024, // 5MB
+        maxFiles: 3,
+        onUpload: async (file) => {
+          // 复用表格的上传配置
+          const result = await sheet.options.fileUploader.upload(file);
+          return result;
+        },
+        onSuccess: (results) => {
+          // 获取当前值
+          const currentValue = sheet.getCellValue(row, col);
+          
+          // 合并新旧文件
+          let newValue: any;
+          if (Array.isArray(currentValue)) {
+            newValue = [...currentValue, ...results];
+          } else if (currentValue && typeof currentValue === 'object') {
+            newValue = [currentValue, ...results];
+          } else {
+            newValue = results.length === 1 ? results[0] : results;
+          }
+          
+          // 更新单元格
+          sheet.setCellValue(row, col, newValue);
+        },
+      });
+    }
+  }
+});
+
+// 监听文件粘贴事件
+sheet.on('file:paste:start', (e) => {
+  console.log(`开始上传 ${e.files.length} 个文件到单元格 [${e.row}, ${e.col}]`);
+});
+
+sheet.on('file:paste', (e) => {
+  console.log(`文件上传成功: ${e.result.name}`);
+  console.log(`文件URL: ${e.result.url}`);
+});
+
+sheet.on('file:paste:error', (e) => {
+  console.error(`文件上传失败: ${e.file.name}`, e.error);
+  alert(`文件 "${e.file.name}" 上传失败: ${e.error.message}`);
+});
+```
+
+### 注意事项
+
+1. **文件大小限制**：建议在上传前进行大小验证，避免上传过大文件
+2. **文件类型限制**：通过 `accept` 参数限制可上传的文件类型
+3. **跨域问题**：确保文件 URL 可以跨域访问，或配置正确的 CORS
+4. **base64 图片**：支持 base64 格式的图片，但会增加数据存储大小
+5. **blob URL**：使用 `URL.createObjectURL` 创建的 URL 在页面刷新后会失效
 
 ---
 

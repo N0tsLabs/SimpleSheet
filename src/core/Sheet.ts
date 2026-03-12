@@ -113,6 +113,9 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     private lastClickTime = 0;
     private lastClickCell: { row: number; col: number } | null = null;
 
+    // 标记是否刚刚进入编辑模式（防止双击后立即触发点击外部结束编辑）
+    private justStartedEdit = false;
+
     // 存储填充前的原始值（用于填充后触发 data:change 事件）
     private fillOriginalValues: Map<string, any> = new Map();
 
@@ -615,7 +618,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             addEvent(document, "mouseup", this.handleMouseUp.bind(this))
         );
 
-        // 全局点击事件 - 用于关闭文件预览悬浮窗
+        // 全局点击事件 - 用于关闭文件预览悬浮窗和结束编辑
         const handleGlobalClick = (e: MouseEvent) => {
             const target = e.target as HTMLElement;
             
@@ -628,6 +631,21 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             if (this.currentFilePreviewCell) {
                 this.closeFilePreview();
             }
+
+            // 如果正在编辑，检查点击是否在编辑器外部
+            // 但如果是刚刚进入编辑模式（双击后），不结束编辑
+            if (this.editorManager.isEditing() && !this.justStartedEdit) {
+                const editor = this.editorManager.getActiveEditor();
+                const editorElement = (editor as any)?.element;
+                
+                // 如果点击的不是编辑器内部，结束编辑
+                if (editorElement && !editorElement.contains(target)) {
+                    this.commitEdit();
+                }
+            }
+            
+            // 重置标志
+            this.justStartedEdit = false;
         };
         
         this.cleanupFns.push(
@@ -862,6 +880,11 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         // 编辑器事件
         this.editorManager.on("end", (event) => {
             this.emit("edit:end", event);
+        });
+
+        // 编辑器输入事件
+        this.editorManager.on("input", (event) => {
+            this.emit("edit:input", event);
         });
 
         // 滚动时更新填充手柄位置
@@ -1140,6 +1163,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             if (!this.options.readonly) {
                 // 双击 - 进入编辑模式
                 hidePopover();
+                this.justStartedEdit = true;
                 this.startEdit(cell.row, cell.col);
 
                 this.emit("cell:dblclick", {
