@@ -19,5 +19,7 @@ export default defineConfig({
     strictPort: false, // 端口被占用时自动尝试下一个
     open: true,
   },
+  optimizeDeps: {
+    include: ['monaco-editor'],
+  },
 });
-

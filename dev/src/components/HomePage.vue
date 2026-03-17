@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, shallowRef, watch } from 'vue';
 import { SimpleSheet } from '../../../src';
-import type { Column } from '../../../src';
+import type { Column, SheetOptions } from '../../../src';
 import '../../../src/styles/index.css';
+
+// Monaco Editor
+import * as monaco from 'monaco-editor';
 
 const emit = defineEmits(['go-docs']);
 
@@ -23,6 +26,17 @@ const testLog = ref<string[]>([]);
 const activeSection = ref('demo');
 const showSourceCode = ref(false);
 const copySuccess = ref(false);
+
+// 代码编辑器状态
+const showCodeEditor = ref(false);
+const editorCode = ref('');
+const editorError = ref('');
+const saveSuccess = ref(false);
+const monacoEditorContainer = ref<HTMLElement | null>(null);
+let monacoEditor: monaco.editor.IStandaloneCodeEditor | null = null;
+
+// 当前配置（会被代码编辑器修改）
+let currentConfig: SheetOptions | null = null;
 
 // 部门选项
 const departmentOptions = [
@@ -56,17 +70,9 @@ const columns = ref<Column[]>([
     title: '头像', 
     width: 80, 
     type: 'file' as const,
-    // 文件列配置示例：限制只能上传图片，最大5MB
     fileUpload: {
       accept: ['image/*'],
       maxSize: 30 * 1024 * 1024,
-      // 自定义上传函数示例（可选）
-      // onUpload: async (file) => {
-      //   // 这里可以调用自己的上传接口
-      //   // const url = await uploadToYourServer(file);
-      //   // return url;
-      //   return URL.createObjectURL(file);
-      // },
     },
   },
   { key: 'name', title: '姓名', width: 100, sortable: true },
@@ -149,13 +155,9 @@ const clearLog = () => {
   testLog.value = [];
 };
 
-// 初始化表格
-const initSheet = async () => {
-  await nextTick();
-  if (!sheetContainer.value) return;
-
-  // 使用配置方式初始化表格，所有功能默认开启
-  sheet = new SimpleSheet(sheetContainer.value, {
+// 获取默认配置
+const getDefaultConfig = (): SheetOptions => {
+  return {
     columns: columns.value,
     data: currentData.value,
     rowHeight: 36,
@@ -167,48 +169,53 @@ const initSheet = async () => {
     allowInsertColumn: true,
     allowDeleteColumn: true,
     allowMultiSelect: true,
-    // 所有功能默认开启，可以通过 features 配置关闭
     features: {
-      columnReorder: true,    // 列拖拽排序
-      rowReorder: true,       // 行拖拽排序
-      columnResize: true,     // 列宽调整
-      autoFill: true,         // 自动填充
-      sorter: true,           // 排序
-      filter: true,           // 筛选
-      search: true,           // 搜索
-      validator: true,        // 验证
-      filePaste: true,        // 文件粘贴
+      columnReorder: true,
+      rowReorder: true,
+      columnResize: true,
+      autoFill: true,
+      sorter: true,
+      filter: true,
+      search: true,
+      validator: true,
+      filePaste: true,
     },
-    // 右键菜单配置
     contextMenuOptions: {
-      // 基础操作
       showCopy: true,
       showPaste: true,
       showCut: true,
       showSelectAll: true,
-      // 行操作
       showInsertRowAbove: true,
       showInsertRowBelow: true,
       showDeleteRow: true,
       showClearRow: true,
-      // 列操作
       showInsertColumnLeft: true,
       showInsertColumnRight: true,
       showDeleteColumn: true,
       showClearColumn: true,
-      // 排序和筛选
       showSortAsc: true,
       showSortDesc: true,
       showSortCancel: true,
       showFilter: true,
-      // 单元格操作
       showMergeCell: true,
       showUnmergeCell: true,
     },
-  });
+  };
+};
+
+// 初始化表格
+const initSheet = async () => {
+  await nextTick();
+  if (!sheetContainer.value) return;
+
+  // 使用当前配置或默认配置
+  const config = currentConfig || getDefaultConfig();
+  
+  sheet = new SimpleSheet(sheetContainer.value, config);
 
   // 更新统计
-  showStats.value = { total: currentData.value.length, filtered: currentData.value.length };
+  const data = config.data || [];
+  showStats.value = { total: data.length, filtered: data.length };
 
   // 添加验证规则
   sheet.addValidationRule('email', { type: 'email', message: '请输入有效的邮箱地址' });
@@ -239,17 +246,20 @@ const initSheet = async () => {
 
   // 列隐藏/显示事件
   sheet.on('column:hide', (e) => {
-    const colName = columns.value[e.index]?.title || `列${e.index + 1}`;
+    const cols = config.columns || [];
+    const colName = cols[e.index]?.title || `列${e.index + 1}`;
     log(`🙈 隐藏列：${colName}`);
   });
   sheet.on('column:show', (e) => {
-    const colName = columns.value[e.index]?.title || `列${e.index + 1}`;
+    const cols = config.columns || [];
+    const colName = cols[e.index]?.title || `列${e.index + 1}`;
     log(`👁️ 显示列：${colName}`);
   });
 
   // 排序事件
   sheet.on('sort:change', (e) => {
-    const colName = columns.value[e.column]?.title || `列${e.column + 1}`;
+    const cols = config.columns || [];
+    const colName = cols[e.column]?.title || `列${e.column + 1}`;
     const direction = e.direction === 'asc' ? '升序' : (e.direction === 'desc' ? '降序' : '取消');
     log(`🔃 排序：${colName} - ${direction}`);
   });
@@ -275,16 +285,17 @@ const initSheet = async () => {
     const label = typeLabels[e.type] || e.type;
 
     let detail = '';
+    const cols = config.columns || [];
     switch (e.type) {
       case 'sort':
         const col = e.detail.column;
-        const colName = col !== undefined && columns.value[col] ? columns.value[col].title : `列${(col ?? 0) + 1}`;
+        const colName = col !== undefined && cols[col] ? cols[col].title : `列${(col ?? 0) + 1}`;
         const direction = e.detail.direction === 'asc' ? '升序' : (e.detail.direction === 'desc' ? '降序' : '取消');
         detail = `列：${colName}, 方式：${direction}`;
         break;
       case 'column-resize':
         const resizeCol = e.detail.column;
-        const resizeColName = resizeCol !== undefined && columns.value[resizeCol] ? columns.value[resizeCol].title : `列${(resizeCol ?? 0) + 1}`;
+        const resizeColName = resizeCol !== undefined && cols[resizeCol] ? cols[resizeCol].title : `列${(resizeCol ?? 0) + 1}`;
         detail = `列：${resizeColName}, ${e.detail.oldWidth}px → ${e.detail.newWidth}px`;
         break;
       case 'column-reorder':
@@ -295,7 +306,7 @@ const initSheet = async () => {
       case 'column-hide':
       case 'column-show':
         const hideColIndex = e.detail.index;
-        const hideColName = hideColIndex !== undefined && columns.value[hideColIndex] ? columns.value[hideColIndex].title : `列${(hideColIndex ?? 0) + 1}`;
+        const hideColName = hideColIndex !== undefined && cols[hideColIndex] ? cols[hideColIndex].title : `列${(hideColIndex ?? 0) + 1}`;
         detail = `列：${hideColName}`;
         break;
     }
@@ -322,38 +333,34 @@ const doSearch = () => {
   if (!searchKeyword.value) {
     searchResults.value = [];
     currentSearchIndex.value = -1;
-    // 清除筛选，恢复部门筛选状态
     if (filterDepartment.value) {
       applyFilter();
     } else {
       sheet?.clearFilter();
     }
-    showStats.value.filtered = currentData.value.length;
+    const data = currentConfig?.data || currentData.value;
+    showStats.value.filtered = data.length;
     return;
   }
-  // 使用内置搜索功能获取结果
   const results = sheet?.doSearch(searchKeyword.value, { caseSensitive: false }) || [];
   searchResults.value = results;
   currentSearchIndex.value = results.length > 0 ? 0 : -1;
   
-  // 获取所有包含搜索关键词的行号（去重）
   const matchingRowIndices = new Set<number>();
   for (const result of results) {
     matchingRowIndices.add(result.row);
   }
   
-  // 如果选择了部门筛选，需要同时满足部门和搜索条件
   let finalRowIndices: number[] = [];
+  const data = currentConfig?.data || currentData.value;
   if (filterDepartment.value) {
     const deptValue = deptValueMap[filterDepartment.value] || filterDepartment.value;
-    // 先获取符合部门条件的行
     const deptRowIndices = new Set<number>();
-    currentData.value.forEach((row, index) => {
+    data.forEach((row: any, index: number) => {
       if (row.department === deptValue) {
         deptRowIndices.add(index);
       }
     });
-    // 取交集
     matchingRowIndices.forEach(idx => {
       if (deptRowIndices.has(idx)) {
         finalRowIndices.push(idx);
@@ -363,10 +370,8 @@ const doSearch = () => {
     finalRowIndices = Array.from(matchingRowIndices);
   }
   
-  // 获取匹配行的 ID 列表
-  const matchingRowKeys = finalRowIndices.map(idx => currentData.value[idx]?.id).filter(id => id !== undefined);
+  const matchingRowKeys = finalRowIndices.map(idx => data[idx]?.id).filter(id => id !== undefined);
   
-  // 使用筛选功能只显示匹配的行
   if (matchingRowKeys.length > 0) {
     sheet?.setFilter('id', matchingRowKeys);
   } else {
@@ -379,7 +384,6 @@ const doSearch = () => {
 
 const searchNext = () => {
   if (searchResults.value.length === 0) return;
-  // 简单实现：循环高亮搜索结果
   currentSearchIndex.value = (currentSearchIndex.value + 1) % searchResults.value.length;
   const result = searchResults.value[currentSearchIndex.value];
   if (result && sheet) {
@@ -400,9 +404,9 @@ const clearSearch = () => {
   searchKeyword.value = '';
   searchResults.value = [];
   currentSearchIndex.value = -1;
-  // 清除筛选
   sheet?.clearFilter();
-  showStats.value.filtered = currentData.value.length;
+  const data = currentConfig?.data || currentData.value;
+  showStats.value.filtered = data.length;
 };
 
 // 筛选
@@ -426,9 +430,10 @@ const doSort = (colKey: string, dir: 'asc' | 'desc') => {
 
 const clearSort = () => {
   sheet?.sortByKey('', null);
-  currentData.value = [...originalData];
-  sheet?.setData(currentData.value);
-  showStats.value.filtered = currentData.value.length;
+  const data = currentConfig?.data || currentData.value;
+  const original = [...originalData];
+  sheet?.setData(original);
+  showStats.value.filtered = original.length;
   log('清除排序');
 };
 
@@ -437,14 +442,14 @@ const validateAll = () => {
   if (!sheet) return;
   sheet.clearAllValidationErrors();
   const data = sheet.getData();
-  // 简单验证示例
+  const cols = currentConfig?.columns || columns.value;
   const errors: { row: number; col: number; message: string }[] = [];
   data.forEach((row: any, rowIndex: number) => {
     if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
-      errors.push({ row: rowIndex, col: columns.value.findIndex(c => c.key === 'email'), message: '邮箱格式不正确' });
+      errors.push({ row: rowIndex, col: cols.findIndex((c: any) => c.key === 'email'), message: '邮箱格式不正确' });
     }
     if (row.age && (row.age < 18 || row.age > 65)) {
-      errors.push({ row: rowIndex, col: columns.value.findIndex(c => c.key === 'age'), message: '年龄必须在 18-65 之间' });
+      errors.push({ row: rowIndex, col: cols.findIndex((c: any) => c.key === 'age'), message: '年龄必须在 18-65 之间' });
     }
   });
   if (errors.length === 0) {
@@ -511,6 +516,536 @@ const sheet = new SimpleSheet('#container', {
   ],
 });`;
 
+// 默认的编辑器代码模板 - 完整的配置，包含事件监听
+const defaultEditorCode = `// ============================================
+// SimpleSheet 实时代码编辑器
+// 在这里编辑完整的表格配置，然后点击"应用代码"
+// ============================================
+
+// 返回配置对象，支持所有 SimpleSheet 配置项
+// 通过 onLog 回调函数将日志输出到操作日志面板
+return {
+  // 列定义
+  columns: [
+    { key: 'id', title: 'ID', width: 60, type: 'number', readonly: true, sortable: true },
+    { 
+      key: 'avatar', 
+      title: '头像', 
+      width: 80, 
+      type: 'file',
+      fileUpload: {
+        accept: ['image/*'],
+        maxSize: 30 * 1024 * 1024,
+      },
+    },
+    { key: 'name', title: '姓名', width: 100, sortable: true },
+    { key: 'department', title: '部门', width: 110, type: 'select', options: [
+      { label: '技术部', value: 'tech', color: '#e3f2fd', textColor: '#1565c0' },
+      { label: '产品部', value: 'product', color: '#e8f5e9', textColor: '#2e7d32' },
+      { label: '设计部', value: 'design', color: '#fce4ec', textColor: '#c2185b' },
+      { label: '市场部', value: 'market', color: '#fff3e0', textColor: '#ef6c00' },
+      { label: '运营部', value: 'operation', color: '#f3e5f5', textColor: '#7b1fa2' },
+    ], sortable: true },
+    { key: 'status', title: '状态', width: 100, type: 'select', options: [
+      { label: '在职', value: 'active', color: '#c8e6c9', textColor: '#2e7d32' },
+      { label: '试用期', value: 'probation', color: '#fff9c4', textColor: '#f9a825' },
+      { label: '离职', value: 'resigned', color: '#ffcdd2', textColor: '#c62828' },
+      { label: '休假', value: 'vacation', color: '#b3e5fc', textColor: '#0277bd' },
+    ]},
+    { key: 'email', title: '邮箱', width: 180, type: 'email' },
+    { key: 'phone', title: '电话', width: 130, type: 'phone' },
+    { key: 'age', title: '年龄', width: 80, type: 'number', sortable: true },
+    { key: 'salary', title: '薪资', width: 120, type: 'number', sortable: true, numberPrefix: '¥', useThousandSeparator: true },
+    { key: 'performance', title: '绩效', width: 80, type: 'number', sortable: true, decimalPlaces: 1 },
+    { key: 'isFullTime', title: '全职', width: 70, type: 'boolean' },
+    { key: 'joinDate', title: '入职日期', width: 120, type: 'date', dateFormat: 'YYYY-MM-DD' },
+    { key: 'website', title: '个人主页', width: 160, type: 'link' },
+    { key: 'tags', title: '标签', width: 180, type: 'select', options: [
+      { label: '核心成员', value: 'core', color: '#ff5722', textColor: '#ffffff' },
+      { label: '技术骨干', value: 'tech_lead', color: '#2196f3', textColor: '#ffffff' },
+      { label: '新人', value: 'newcomer', color: '#4caf50', textColor: '#ffffff' },
+      { label: '管理层', value: 'management', color: '#9c27b0', textColor: '#ffffff' },
+      { label: '远程办公', value: 'remote', color: '#607d8b', textColor: '#ffffff' },
+    ], multiple: true },
+    { key: 'remark', title: '备注', width: 200, wrapText: 'ellipsis' },
+  ],
+  
+  // 数据
+  data: (() => {
+    const names = ['张伟', '李娜', '王芳', '刘洋', '陈明', '杨静', '赵强', '黄丽', '周杰', '吴敏'];
+    const deptValues = ['tech', 'product', 'design', 'market', 'operation'];
+    const statusValues = ['active', 'probation', 'resigned', 'vacation'];
+    const tagValues = ['core', 'tech_lead', 'newcomer', 'management', 'remote'];
+    const avatars = [
+      'https://api.dicebear.com/7.x/avataaars/svg?seed=1',
+      'https://api.dicebear.com/7.x/avataaars/svg?seed=2',
+      'https://api.dicebear.com/7.x/avataaars/svg?seed=3',
+      '',
+      'https://api.dicebear.com/7.x/avataaars/svg?seed=5',
+    ];
+    
+    const data = [];
+    for (let i = 0; i < 100; i++) {
+      const numTags = 1 + Math.floor(Math.random() * 3);
+      const shuffledTags = [...tagValues].sort(() => Math.random() - 0.5);
+      const selectedTags = shuffledTags.slice(0, numTags);
+      
+      data.push({
+        id: i + 1,
+        avatar: i < 5 ? (avatars[i] ? { url: avatars[i], name: 'avatar'+(i+1)+'.svg' } : null) : null,
+        name: names[i % names.length],
+        department: deptValues[i % deptValues.length],
+        status: statusValues[i % statusValues.length],
+        email: 'user'+(i + 1)+'@example.com',
+        phone: '138'+String(10000000 + Math.floor(Math.random() * 90000000)).slice(0, 8),
+        age: 22 + Math.floor(Math.random() * 30),
+        salary: Math.floor(8000 + Math.random() * 42000),
+        performance: Number((3 + Math.random() * 2).toFixed(1)),
+        isFullTime: Math.random() > 0.2,
+        joinDate: '202'+Math.floor(Math.random() * 4)+'-'+String(1 + Math.floor(Math.random() * 12)).padStart(2, '0')+'-'+String(1 + Math.floor(Math.random() * 28)).padStart(2, '0'),
+        website: i % 3 === 0 ? 'https://github.com/user'+(i + 1) : '',
+        tags: selectedTags,
+        remark: i % 10 === 0 ? '表现优秀，值得培养' : '',
+      });
+    }
+    return data;
+  })(),
+  
+  // 行高
+  rowHeight: 36,
+  
+  // 表头高度
+  headerHeight: 40,
+  
+  // 主题: 'light' | 'dark'
+  theme: 'light',
+  
+  // 显示行号
+  showRowNumber: true,
+  
+  // 允许插入行
+  allowInsertRow: true,
+  
+  // 允许删除行
+  allowDeleteRow: true,
+  
+  // 允许插入列
+  allowInsertColumn: true,
+  
+  // 允许删除列
+  allowDeleteColumn: true,
+  
+  // 允许多选
+  allowMultiSelect: true,
+  
+  // 功能特性
+  features: {
+    columnReorder: true,    // 列拖拽排序
+    rowReorder: true,       // 行拖拽排序
+    columnResize: true,     // 列宽调整
+    autoFill: true,         // 自动填充
+    sorter: true,           // 排序
+    filter: true,           // 筛选
+    search: true,           // 搜索
+    validator: true,        // 验证
+    filePaste: true,        // 文件粘贴
+  },
+  
+  // 右键菜单配置
+  contextMenuOptions: {
+    showCopy: true,
+    showPaste: true,
+    showCut: true,
+    showSelectAll: true,
+    showInsertRowAbove: true,
+    showInsertRowBelow: true,
+    showDeleteRow: true,
+    showClearRow: true,
+    showInsertColumnLeft: true,
+    showInsertColumnRight: true,
+    showDeleteColumn: true,
+    showClearColumn: true,
+    showSortAsc: true,
+    showSortDesc: true,
+    showSortCancel: true,
+    showFilter: true,
+    showMergeCell: true,
+    showUnmergeCell: true,
+  },
+  
+  // ============================================
+  // 事件监听配置 - 通过 onLog 回调输出到日志面板
+  // ============================================
+  onLog: (msg) => console.log('[Sheet]', msg),  // 内部日志
+  
+  // 单元格事件
+  onCellClick: (e) => console.log('点击单元格：行' + (e.row + 1) + ', 列' + (e.col + 1)),
+  onCellDoubleClick: (e) => console.log('双击单元格：行' + (e.row + 1) + ', 列' + (e.col + 1)),
+  onEditStart: (e) => console.log('开始编辑：行' + (e.row + 1) + ', 列' + (e.col + 1)),
+  onEditEnd: (e) => console.log('结束编辑：行' + (e.row + 1) + ', 列' + (e.col + 1) + ', 值：' + e.value),
+  
+  // 数据变更事件
+  onDataChange: (e) => console.log('数据变更：行' + (e.row + 1) + ', 列' + (e.col + 1) + ', 从 "' + e.oldValue + '" 变为 "' + e.newValue + '"'),
+  onRowInsert: (e) => console.log('插入行：位置' + (e.index + 1)),
+  onRowDelete: (e) => console.log('删除行：位置' + (e.index + 1)),
+  onRowReorder: (e) => console.log('行排序：从' + (e.fromIndex + 1) + '到' + (e.toIndex + 1)),
+  
+  // 列事件
+  onColumnResize: (e) => console.log('列宽调整：列' + (e.column + 1) + ', ' + e.oldWidth + 'px → ' + e.newWidth + 'px'),
+  onColumnReorder: (e) => console.log('列排序：从' + (e.fromIndex + 1) + '到' + (e.toIndex + 1)),
+  onColumnHide: (e) => console.log('隐藏列：列' + (e.index + 1)),
+  onColumnShow: (e) => console.log('显示列：列' + (e.index + 1)),
+  
+  // 选区事件
+  onSelectionChange: (e) => console.log('选区变更：' + e.rows.length + '行 x ' + e.cols.length + '列'),
+  
+  // 复制粘贴事件
+  onCopy: (e) => console.log('复制：' + e.data.length + '个单元格'),
+  onPaste: (e) => console.log('粘贴：' + e.data.length + '个单元格'),
+  onCut: (e) => console.log('剪切：' + e.data.length + '个单元格'),
+  
+  // 排序事件
+  onSortChange: (e) => console.log('排序变更：列' + (e.column + 1) + ', 方向：' + e.direction),
+  
+  // 筛选事件
+  onFilterChange: (e) => console.log('筛选变更：' + e.filters.length + '个条件'),
+  
+  // 文件上传事件
+  onFilePasteStart: (e) => console.log('开始上传' + e.files.length + '个文件到行' + (e.row + 1)),
+  onFilePaste: (e) => console.log('文件上传成功：' + e.result.name),
+  onFilePasteError: (e) => console.log('文件上传失败：' + e.file.name + ' - ' + e.error.message),
+  
+  // 配置变更事件
+  onConfigChange: (e) => console.log('配置变更：' + e.type),
+  
+  // 验证事件
+  onValidationError: (e) => console.log('验证错误：行' + (e.row + 1) + ', 列' + (e.col + 1) + ' - ' + e.message),
+};`;
+
+// 初始化编辑器代码
+const initEditorCode = () => {
+  const saved = localStorage.getItem('simple-sheet-demo-code-v3');
+  editorCode.value = saved || defaultEditorCode;
+};
+
+// 应用代码
+const applyCode = async () => {
+  editorError.value = '';
+  try {
+    const code = editorCode.value;
+    
+    // 使用 Function 构造器执行代码
+    const fn = new Function(`
+      "use strict";
+      ${code}
+    `);
+    
+    // 执行代码并获取返回的配置
+    const result = fn();
+    
+    if (!result || typeof result !== 'object') {
+      throw new Error('代码必须返回一个配置对象');
+    }
+    
+    // 验证必要的字段
+    if (!result.columns || !Array.isArray(result.columns)) {
+      throw new Error('配置对象必须包含 columns 数组');
+    }
+    if (!result.data || !Array.isArray(result.data)) {
+      throw new Error('配置对象必须包含 data 数组');
+    }
+    
+    // 保存到 localStorage
+    localStorage.setItem('simple-sheet-demo-code-v3', code);
+    
+    // 显示成功提示
+    saveSuccess.value = true;
+    setTimeout(() => { saveSuccess.value = false; }, 2000);
+    
+    log('✅ 代码已应用，正在重新初始化表格...');
+    
+    // 保存当前配置
+    currentConfig = result;
+    
+    // 重新初始化表格
+    destroySheet();
+    await initSheetWithConfig(result);
+    
+    // 应用主题
+    if (result.theme) {
+      currentTheme.value = result.theme;
+    }
+    
+    log('✅ 表格重新初始化完成，共 ' + result.data.length + ' 行数据');
+  } catch (err: any) {
+    editorError.value = err.message || '代码执行出错';
+    log(`❌ 代码执行错误: ${err.message}`);
+  }
+};
+
+// 使用配置初始化表格（支持事件监听）
+const initSheetWithConfig = async (config: any) => {
+  await nextTick();
+  if (!sheetContainer.value) return;
+
+  // 创建表格实例
+  sheet = new SimpleSheet(sheetContainer.value, config);
+
+  // 更新统计
+  const data = config.data || [];
+  showStats.value = { total: data.length, filtered: data.length };
+
+  // 添加验证规则（如果配置中有）
+  if (config.validationRules) {
+    Object.entries(config.validationRules).forEach(([key, rule]: [string, any]) => {
+      sheet?.addValidationRule(key, rule);
+    });
+  }
+
+  // 绑定事件监听
+  bindEventListeners(config);
+
+  log('表格初始化完成');
+};
+
+// 绑定事件监听器
+const bindEventListeners = (config: any) => {
+  if (!sheet) return;
+
+  // 单元格事件
+  if (config.onCellClick) {
+    sheet.on('cell:click', (e) => {
+      log(`点击单元格：行${e.row + 1}, 列${e.col + 1}`);
+      config.onCellClick(e);
+    });
+  }
+  if (config.onCellDoubleClick) {
+    sheet.on('cell:dblclick', (e) => {
+      log(`双击单元格：行${e.row + 1}, 列${e.col + 1}`);
+      config.onCellDoubleClick(e);
+    });
+  }
+  if (config.onEditStart) {
+    sheet.on('edit:start', (e) => {
+      log(`开始编辑：行${e.row + 1}, 列${e.col + 1}`);
+      config.onEditStart(e);
+    });
+  }
+  if (config.onEditEnd) {
+    sheet.on('edit:end', (e) => {
+      log(`结束编辑：行${e.row + 1}, 列${e.col + 1}`);
+      config.onEditEnd(e);
+    });
+  }
+
+  // 数据变更事件
+  if (config.onDataChange) {
+    sheet.on('data:change', (e) => {
+      log(`数据变更：行${e.row + 1}, 列${e.col + 1}`);
+      config.onDataChange(e);
+    });
+  }
+  if (config.onRowInsert) {
+    sheet.on('row:insert', (e) => {
+      log(`插入行：位置${e.index + 1}`);
+      config.onRowInsert(e);
+    });
+  }
+  if (config.onRowDelete) {
+    sheet.on('row:delete', (e) => {
+      log(`删除行：位置${e.index + 1}`);
+      config.onRowDelete(e);
+    });
+  }
+  if (config.onRowReorder) {
+    sheet.on('row:reorder', (e) => {
+      log(`行排序：从${e.fromIndex + 1}到${e.toIndex + 1}`);
+      config.onRowReorder(e);
+    });
+  }
+
+  // 列事件
+  if (config.onColumnResize) {
+    sheet.on('column:resize', (e) => {
+      log(`列宽调整：列${e.column + 1}, ${e.oldWidth}px → ${e.newWidth}px`);
+      config.onColumnResize(e);
+    });
+  }
+  if (config.onColumnReorder) {
+    sheet.on('column:reorder', (e) => {
+      log(`列排序：从${e.fromIndex + 1}到${e.toIndex + 1}`);
+      config.onColumnReorder(e);
+    });
+  }
+  if (config.onColumnHide) {
+    sheet.on('column:hide', (e) => {
+      log(`隐藏列：列${e.index + 1}`);
+      config.onColumnHide(e);
+    });
+  }
+  if (config.onColumnShow) {
+    sheet.on('column:show', (e) => {
+      log(`显示列：列${e.index + 1}`);
+      config.onColumnShow(e);
+    });
+  }
+
+  // 选区事件
+  if (config.onSelectionChange) {
+    sheet.on('selection:change', (e) => {
+      log(`选区变更：${e.rows?.length || 0}行 x ${e.cols?.length || 0}列`);
+      config.onSelectionChange(e);
+    });
+  }
+
+  // 复制粘贴事件
+  if (config.onCopy) {
+    sheet.on('copy', (e) => {
+      log(`复制：${e.data?.length || 0}个单元格`);
+      config.onCopy(e);
+    });
+  }
+  if (config.onPaste) {
+    sheet.on('paste', (e) => {
+      log(`粘贴：${e.data?.length || 0}个单元格`);
+      config.onPaste(e);
+    });
+  }
+  if (config.onCut) {
+    sheet.on('cut', (e) => {
+      log(`剪切：${e.data?.length || 0}个单元格`);
+      config.onCut(e);
+    });
+  }
+
+  // 排序事件
+  if (config.onSortChange) {
+    sheet.on('sort:change', (e) => {
+      const direction = e.direction === 'asc' ? '升序' : (e.direction === 'desc' ? '降序' : '取消');
+      log(`排序变更：列${e.column + 1}, 方向：${direction}`);
+      config.onSortChange(e);
+    });
+  }
+
+  // 筛选事件
+  if (config.onFilterChange) {
+    sheet.on('filter:change', (e) => {
+      log(`筛选变更：${e.filters?.length || 0}个条件`);
+      config.onFilterChange(e);
+    });
+  }
+
+  // 文件上传事件
+  if (config.onFilePasteStart) {
+    sheet.on('file:paste:start', (e) => {
+      log(`📤 开始上传${e.files?.length || 0}个文件到行${e.row + 1}`);
+      config.onFilePasteStart(e);
+    });
+  }
+  if (config.onFilePaste) {
+    sheet.on('file:paste', (e) => {
+      log(`✅ 文件上传成功：${e.result?.name || 'unknown'}`);
+      config.onFilePaste(e);
+    });
+  }
+  if (config.onFilePasteError) {
+    sheet.on('file:paste:error', (e) => {
+      log(`❌ 文件上传失败：${e.file?.name || 'unknown'} - ${e.error?.message || 'error'}`);
+      config.onFilePasteError(e);
+    });
+  }
+
+  // 配置变更事件
+  if (config.onConfigChange) {
+    sheet.on('config:change', (e) => {
+      log(`配置变更：${e.type}`);
+      config.onConfigChange(e);
+    });
+  }
+
+  // 验证事件
+  if (config.onValidationError) {
+    sheet.on('validation:error', (e) => {
+      log(`验证错误：行${e.row + 1}, 列${e.col + 1} - ${e.message}`);
+      config.onValidationError(e);
+    });
+  }
+
+  // 内部日志
+  if (config.onLog) {
+    sheet.on('log', (e) => {
+      config.onLog(e);
+    });
+  }
+};
+
+// 重置代码
+const resetCode = () => {
+  editorCode.value = defaultEditorCode;
+  if (monacoEditor) {
+    monacoEditor.setValue(defaultEditorCode);
+  }
+  localStorage.removeItem('simple-sheet-demo-code-v3');
+  currentConfig = null;
+  log('🔄 代码已重置为默认');
+};
+
+// 复制编辑器代码
+const copyEditorCode = async () => {
+  try {
+    await navigator.clipboard.writeText(editorCode.value);
+    saveSuccess.value = true;
+    setTimeout(() => { saveSuccess.value = false; }, 2000);
+  } catch {
+    console.warn('复制失败');
+  }
+};
+
+// 初始化 Monaco Editor
+const initMonacoEditor = () => {
+  if (!monacoEditorContainer.value || monacoEditor) return;
+  
+  monacoEditor = monaco.editor.create(monacoEditorContainer.value, {
+    value: editorCode.value,
+    language: 'javascript',
+    theme: 'vs-dark',
+    automaticLayout: true,
+    formatOnType: true,
+    formatOnPaste: true,
+    minimap: { enabled: true },
+    scrollBeyondLastLine: false,
+    fontSize: 13,
+    fontFamily: 'JetBrains Mono, Fira Code, monospace',
+    lineNumbers: 'on',
+    roundedSelection: false,
+    padding: { top: 16, bottom: 16 },
+  });
+  
+  // 监听内容变化
+  monacoEditor.onDidChangeModelContent(() => {
+    editorCode.value = monacoEditor?.getValue() || '';
+  });
+};
+
+// 销毁 Monaco Editor
+const destroyMonacoEditor = () => {
+  if (monacoEditor) {
+    monacoEditor.dispose();
+    monacoEditor = null;
+  }
+};
+
+// 监听编辑器显示状态
+watch(showCodeEditor, (newValue) => {
+  if (newValue) {
+    nextTick(() => {
+      initMonacoEditor();
+    });
+  } else {
+    destroyMonacoEditor();
+  }
+});
+
 const demoSourceCode = `<script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick } from 'vue';
 import { SimpleSheet } from '@n0ts123/simple-sheet';
@@ -552,17 +1087,9 @@ const columns = ref<Column[]>([
     title: '头像',
     width: 80,
     type: 'file',
-    // 文件列配置：限制只能上传图片，最大30MB
     fileUpload: {
       accept: ['image/*'],
       maxSize: 30 * 1024 * 1024,
-      // 自定义上传函数（可选）
-      // onUpload: async (file) => {
-      //   // 调用自己的上传接口
-      //   // const url = await uploadToYourServer(file);
-      //   // return url;
-      //   return URL.createObjectURL(file);
-      // },
     },
   },
   { key: 'name', title: '姓名', width: 100, sortable: true },
@@ -583,22 +1110,9 @@ const columns = ref<Column[]>([
 // 生成测试数据
 const generateData = () => {
   const names = ['张伟', '李娜', '王芳', '刘洋', '陈明', '杨静', '赵强', '黄丽', '周杰', '吴敏'];
-  const remarks = [
-    '表现优秀', '工作认真\\n态度积极', '团队协作能力强\\n沟通顺畅',
-    '需要加强技术能力', '表现稳定', '有潜力\\n值得培养', '',
-    '绩效达标', '这是一段很长的备注文本，用于测试省略号显示效果',
-    '多行文本测试\\n第二行\\n第三行内容',
-  ];
   const deptValues = ['tech', 'product', 'design', 'market', 'operation'];
   const statusValues = ['active', 'probation', 'resigned', 'vacation'];
   const tagValues = ['core', 'tech_lead', 'newcomer', 'management', 'remote'];
-  const avatars = [
-    'https://api.dicebear.com/7.x/avataaars/svg?seed=1',
-    'https://api.dicebear.com/7.x/avataaars/svg?seed=2',
-    'https://api.dicebear.com/7.x/avataaars/svg?seed=3',
-    '',
-    'https://api.dicebear.com/7.x/avataaars/svg?seed=5',
-  ];
 
   const data = [];
   for (let i = 0; i < 100; i++) {
@@ -608,7 +1122,6 @@ const generateData = () => {
 
     data.push({
       id: i + 1,
-      avatar: i < 5 ? (avatars[i] ? { url: avatars[i], name: 'avatar'+(i+1)+'.svg' } : null) : null,
       name: names[i % names.length],
       department: deptValues[i % deptValues.length],
       status: statusValues[i % statusValues.length],
@@ -621,7 +1134,7 @@ const generateData = () => {
       joinDate: '202'+Math.floor(Math.random() * 4)+'-'+String(1 + Math.floor(Math.random() * 12)).padStart(2, '0')+'-'+String(1 + Math.floor(Math.random() * 28)).padStart(2, '0'),
       website: i % 3 === 0 ? 'https://github.com/user'+(i + 1) : '',
       tags: selectedTags,
-      remark: remarks[i % remarks.length],
+      remark: '',
     });
   }
   return data;
@@ -687,44 +1200,6 @@ const initSheet = async () => {
   // 事件监听
   sheet.on('cell:click', (e) => {
     console.log('点击单元格：行'+(e.row + 1)+', 列'+(e.col + 1));
-  });
-  
-  sheet.on('data:change', (e) => {
-    console.log('数据变更:', e);
-  });
-  
-  sheet.on('file:paste:start', (e) => {
-    console.log('开始上传 '+e.files.length+' 个文件到行'+(e.row + 1));
-  });
-  
-  sheet.on('file:paste', (e) => {
-    console.log('文件上传成功:', e.result.name);
-  });
-  
-  sheet.on('file:paste:error', (e) => {
-    console.error('文件上传失败:', e.file.name, e.error.message);
-  });
-  
-  // 列隐藏/显示事件
-  sheet.on('column:hide', (e) => {
-    console.log('隐藏列：', columns.value[e.index]?.title || '列' + (e.index + 1));
-  });
-  
-  sheet.on('column:show', (e) => {
-    console.log('显示列：', columns.value[e.index]?.title || '列' + (e.index + 1));
-  });
-  
-  // 排序事件
-  sheet.on('sort:change', (e) => {
-    const colName = columns.value[e.column]?.title || '列' + (e.column + 1);
-    const direction = e.direction === 'asc' ? '升序' : (e.direction === 'desc' ? '降序' : '取消');
-    console.log('排序：', colName, '-', direction);
-  });
-  
-  // 配置变更事件
-  sheet.on('config:change', (e) => {
-    console.log('配置变更类型:', e.type);
-    console.log('变更详情:', e.detail);
   });
 };
 
@@ -798,6 +1273,7 @@ const scrollToSection = (id: string) => {
 
 onMounted(() => {
   initSheet();
+  initEditorCode();
 });
 
 onUnmounted(() => {
@@ -955,6 +1431,50 @@ onUnmounted(() => {
 
       <div class="demo-tips">
         💡 提示：双击编辑 · Alt+Enter 换行 · 右键菜单 · 拖拽排序图标排序 · Ctrl+C/V 复制粘贴 · Ctrl+Z/Y 撤销重做
+      </div>
+
+      <!-- 代码编辑器 -->
+      <div class="code-editor-toggle">
+        <button class="btn code-editor-btn" @click="showCodeEditor = !showCodeEditor">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/>
+          </svg>
+          {{ showCodeEditor ? '收起代码编辑器' : '✏️ 实时编辑代码' }}
+        </button>
+      </div>
+
+      <div v-if="showCodeEditor" class="code-editor-panel">
+        <div class="code-editor-header">
+          <div class="code-editor-title">
+            <span>📝 实时代码编辑器</span>
+            <span class="code-editor-subtitle">编辑完整的表格配置，点击"应用代码"实时预览</span>
+          </div>
+          <div class="code-editor-actions">
+            <button class="btn btn-sm" @click="copyEditorCode">
+              📋 复制
+            </button>
+            <button class="btn btn-sm" @click="resetCode">
+              🔄 重置
+            </button>
+            <button class="btn btn-primary btn-sm" @click="applyCode">
+              {{ saveSuccess ? '✓ 已应用' : '▶️ 应用代码' }}
+            </button>
+          </div>
+        </div>
+        <div v-if="editorError" class="code-editor-error">
+          ❌ {{ editorError }}
+        </div>
+        <div class="code-editor-content">
+          <div ref="monacoEditorContainer" class="monaco-editor-wrapper"></div>
+        </div>
+        <div class="code-editor-footer">
+          <div class="code-editor-hints">
+            <span class="hint">💡 代码必须返回一个包含 columns 和 data 的配置对象</span>
+            <span class="hint">📝 支持所有 SimpleSheet 配置项：theme, rowHeight, features, contextMenuOptions 等</span>
+            <span class="hint">🎨 支持完整的事件监听：onCellClick, onDataChange, onSortChange 等</span>
+            <span class="hint">📊 事件会自动输出到右侧操作日志面板</span>
+          </div>
+        </div>
       </div>
 
       <!-- 查看源码 -->
@@ -1350,6 +1870,22 @@ onUnmounted(() => {
   background: #334155;
 }
 
+.btn-primary {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
 .btn-icon {
   padding: 8px 10px;
 }
@@ -1463,6 +1999,120 @@ onUnmounted(() => {
 .dark .demo-tips {
   background: #1e3a5f;
   color: #7dd3fc;
+}
+
+/* 代码编辑器 */
+.code-editor-toggle {
+  max-width: 1400px;
+  margin: 24px auto 0;
+  text-align: center;
+}
+
+.code-editor-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  background: #3b82f6;
+  border: 1px solid #3b82f6;
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.code-editor-btn:hover {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+.code-editor-panel {
+  max-width: 1400px;
+  margin: 16px auto 0;
+  animation: slideDown 0.3s ease;
+  background: #1e293b;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.code-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: #0f172a;
+  border-bottom: 1px solid #334155;
+}
+
+.code-editor-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.code-editor-title span:first-child {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.code-editor-subtitle {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.code-editor-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.code-editor-error {
+  padding: 12px 20px;
+  background: #fef2f2;
+  border-left: 4px solid #ef4444;
+  color: #dc2626;
+  font-size: 13px;
+  font-family: monospace;
+}
+
+.dark .code-editor-error {
+  background: #450a0a;
+  color: #fca5a5;
+}
+
+.code-editor-content {
+  padding: 0;
+}
+
+/* Monaco Editor 容器样式 */
+.monaco-editor-wrapper {
+  width: 100%;
+  min-height: 500px;
+  max-height: 700px;
+  overflow: hidden;
+}
+
+.monaco-editor-wrapper :deep(.monaco-editor) {
+  border-radius: 0 !important;
+}
+
+.code-editor-footer {
+  padding: 12px 20px;
+  background: #0f172a;
+  border-top: 1px solid #334155;
+}
+
+.code-editor-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.code-editor-hints .hint {
+  font-size: 12px;
+  color: #94a3b8;
 }
 
 /* 代码 */
@@ -1778,6 +2428,21 @@ onUnmounted(() => {
 
   .code-block code {
     font-size: 12px;
+  }
+
+  .code-editor-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .code-editor-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .monaco-editor-wrapper {
+    min-height: 300px;
   }
 }
 
