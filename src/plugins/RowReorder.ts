@@ -27,6 +27,8 @@ interface RowReorderOptions {
   getScrollTop: () => number;
   /** 获取行的偏移量（用于自适应行高） */
   getRowOffset?: (rowIndex: number) => number;
+  /** 是否启用 */
+  enabled?: boolean;
 }
 
 export class RowReorder extends EventEmitter<RowReorderEvents> {
@@ -60,6 +62,7 @@ export class RowReorder extends EventEmitter<RowReorderEvents> {
    * 挂载到容器
    */
   mount(container: HTMLElement): void {
+    if (this.options.enabled === false) return;
     this.container = container;
 
     // 创建拖拽幽灵元素

@@ -230,6 +230,30 @@ const initSheet = async () => {
   sheet.on('selection:change', () => {});
   sheet.on('copy', () => log('已复制'));
   sheet.on('paste', () => log('已粘贴'));
+  
+  // 数据变更事件 - 实时打印所有数据变更
+  sheet.on('data:change', (e) => {
+    if (e.changes && Array.isArray(e.changes) && e.changes.length > 0) {
+      // 批量变更
+      e.changes.forEach((change: any) => {
+        const row = change.row ?? 0;
+        const col = change.col ?? 0;
+        const oldValue = change.oldValue ?? '';
+        const newValue = change.newValue ?? '';
+        const colName = config.columns?.[col]?.title ?? `列${col + 1}`;
+        log(`数据变更：行${row + 1} ${colName} "${oldValue}" → "${newValue}"`);
+      });
+    } else if (e.row !== undefined && e.col !== undefined) {
+      // 单个变更
+      const row = e.row;
+      const col = e.col;
+      const oldValue = e.oldValue ?? '';
+      const newValue = e.newValue ?? '';
+      const colName = config.columns?.[col]?.title ?? `列${col + 1}`;
+      log(`数据变更：行${row + 1} ${colName} "${oldValue}" → "${newValue}"`);
+    }
+  });
+  
   sheet.on('row:insert', (e) => {
     log(`插入行：位置${e.index + 1}`);
   });
@@ -627,10 +651,10 @@ return {
     return data;
   })(),
   
-  // 行高
+  // 行高（像素）
   rowHeight: 36,
   
-  // 表头高度
+  // 表头高度（像素）
   headerHeight: 40,
   
   // 主题: 'light' | 'dark'
@@ -638,6 +662,15 @@ return {
   
   // 显示行号
   showRowNumber: true,
+  
+  // 显示复选框列
+  showCheckbox: false,
+  
+  // 行号列宽度（像素）
+  rowNumberWidth: 50,
+  
+  // 全局只读模式
+  readonly: false,
   
   // 允许插入行
   allowInsertRow: true,
@@ -654,6 +687,18 @@ return {
   // 允许多选
   allowMultiSelect: true,
   
+  // 最大撤销步数
+  maxHistorySize: 50,
+  
+  // 虚拟滚动缓冲区大小（行数）
+  virtualScrollBuffer: 5,
+  
+  // 表格上下边距（像素）
+  verticalPadding: 0,
+  
+  // 启用右键菜单（总开关）
+  enableContextMenu: true,
+  
   // 功能特性
   features: {
     columnReorder: true,    // 列拖拽排序
@@ -669,24 +714,32 @@ return {
   
   // 右键菜单配置
   contextMenuOptions: {
-    showCopy: true,
-    showPaste: true,
-    showCut: true,
-    showSelectAll: true,
-    showInsertRowAbove: true,
-    showInsertRowBelow: true,
-    showDeleteRow: true,
-    showClearRow: true,
-    showInsertColumnLeft: true,
-    showInsertColumnRight: true,
-    showDeleteColumn: true,
-    showClearColumn: true,
-    showSortAsc: true,
-    showSortDesc: true,
-    showSortCancel: true,
-    showFilter: true,
-    showMergeCell: true,
-    showUnmergeCell: true,
+    showCopy: true,           // 显示复制
+    showPaste: true,          // 显示粘贴
+    showCut: true,            // 显示剪切
+    showSelectAll: true,      // 显示全选
+    showInsertRowAbove: true, // 显示上方插入行
+    showInsertRowBelow: true, // 显示下方插入行
+    showDeleteRow: true,      // 显示删除行
+    showClearRow: true,       // 显示清空行
+    showInsertColumnLeft: true,  // 显示左侧插入列
+    showInsertColumnRight: true, // 显示右侧插入列
+    showDeleteColumn: true,   // 显示删除列
+    showClearColumn: true,    // 显示清空列
+    showSortAsc: true,        // 显示升序排序
+    showSortDesc: true,       // 显示降序排序
+    showSortCancel: true,     // 显示取消排序
+    showFilter: true,         // 显示筛选
+    showMergeCell: true,      // 显示合并单元格
+    showUnmergeCell: true,    // 显示取消合并单元格
+  },
+  
+  // 提示文本配置
+  toastMessages: {
+    readonlyCellEdit: '该单元格为只读，无法编辑',
+    copySuccess: '复制成功',
+    pasteSuccess: '粘贴成功',
+    pasteFailed: '粘贴失败',
   },
   
   // ============================================
@@ -700,8 +753,16 @@ return {
   onEditStart: (e) => console.log('开始编辑：行' + (e.row + 1) + ', 列' + (e.col + 1)),
   onEditEnd: (e) => console.log('结束编辑：行' + (e.row + 1) + ', 列' + (e.col + 1) + ', 值：' + e.value),
   
-  // 数据变更事件
-  onDataChange: (e) => console.log('数据变更：行' + (e.row + 1) + ', 列' + (e.col + 1) + ', 从 "' + e.oldValue + '" 变为 "' + e.newValue + '"'),
+  // 数据变更事件 - 每次单元格数据变化时触发
+  onDataChange: (e) => {
+    if (e.changes) {
+      // 批量变更（如自动填充、粘贴）
+      console.log('批量数据变更：' + e.changes.length + '个单元格');
+    } else {
+      // 单个变更
+      console.log('数据变更：行' + (e.row + 1) + ', 列' + (e.col + 1) + ', 从 "' + e.oldValue + '" 变为 "' + e.newValue + '"');
+    }
+  },
   onRowInsert: (e) => console.log('插入行：位置' + (e.index + 1)),
   onRowDelete: (e) => console.log('删除行：位置' + (e.index + 1)),
   onRowReorder: (e) => console.log('行排序：从' + (e.fromIndex + 1) + '到' + (e.toIndex + 1)),
@@ -747,7 +808,7 @@ return {
 };`;
 
 // 代码版本号（每次修改 defaultEditorCode 时更新）
-const CODE_VERSION = 'v6';
+const CODE_VERSION = 'v8';
 
 // 初始化编辑器代码
 const initEditorCode = () => {
@@ -874,15 +935,30 @@ const bindEventListeners = (config: any) => {
     });
   }
 
-  // 数据变更事件
-  if (config.onDataChange) {
-    sheet.on('data:change', (e) => {
-      const row = e.row ?? e.changes[0]?.row ?? 0;
-      const col = e.col ?? e.changes[0]?.col ?? 0;
-      log(`数据变更：行${row + 1}, 列${col + 1}`);
-      config.onDataChange(e);
-    });
-  }
+  // 数据变更事件 - 始终监听，实时打印所有数据变更
+  sheet.on('data:change', (e) => {
+    // 处理批量变更（changes数组）或单个变更（row/col属性）
+    if (e.changes && Array.isArray(e.changes) && e.changes.length > 0) {
+      // 批量变更（如自动填充、粘贴）
+      e.changes.forEach((change: any) => {
+        const row = change.row ?? 0;
+        const col = change.col ?? 0;
+        const oldValue = change.oldValue ?? '';
+        const newValue = change.newValue ?? '';
+        const colName = config.columns?.[col]?.title ?? `列${col + 1}`;
+        log(`数据变更：行${row + 1} ${colName} "${oldValue}" → "${newValue}"`);
+      });
+    } else if (e.row !== undefined && e.col !== undefined) {
+      // 单个变更
+      const row = e.row;
+      const col = e.col;
+      const oldValue = e.oldValue ?? '';
+      const newValue = e.newValue ?? '';
+      const colName = config.columns?.[col]?.title ?? `列${col + 1}`;
+      log(`数据变更：行${row + 1} ${colName} "${oldValue}" → "${newValue}"`);
+    }
+    config.onDataChange?.(e);
+  });
   // 行插入删除事件 - 始终监听，不依赖配置
   sheet.on('row:insert', (e) => {
     log(`插入行：位置${e.index + 1}`);

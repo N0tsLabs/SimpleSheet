@@ -34,6 +34,8 @@ interface AutoFillOptions {
   maxRow: number;
   /** 最大列数 */
   maxCol: number;
+  /** 是否启用 */
+  enabled?: boolean;
 }
 
 export class AutoFill extends EventEmitter<AutoFillEvents> {
@@ -64,6 +66,7 @@ export class AutoFill extends EventEmitter<AutoFillEvents> {
    * 挂载到容器
    */
   mount(container: HTMLElement, selectionLayer: HTMLElement): void {
+    if (this.options.enabled === false) return;
     this.container = container;
 
     // 创建填充手柄

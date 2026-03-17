@@ -20,6 +20,8 @@ interface ColumnResizerOptions {
   getColumnWidth: (index: number) => number;
   /** 设置列宽 */
   setColumnWidth: (index: number, width: number) => void;
+  /** 是否启用 */
+  enabled?: boolean;
 }
 
 export class ColumnResizer extends EventEmitter<ColumnResizerEvents> {
@@ -39,6 +41,7 @@ export class ColumnResizer extends EventEmitter<ColumnResizerEvents> {
       maxWidth: options.maxWidth ?? 500,
       getColumnWidth: options.getColumnWidth,
       setColumnWidth: options.setColumnWidth,
+      enabled: options.enabled ?? true,
     };
   }
 

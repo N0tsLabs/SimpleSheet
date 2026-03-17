@@ -27,6 +27,8 @@ interface ColumnReorderOptions {
   rowNumberWidth?: number;
   /** 拖拽完成后清除选区回调 */
   clearSelection?: () => void;
+  /** 是否启用 */
+  enabled?: boolean;
 }
 
 interface ColumnReorderPrivateOptions {
@@ -36,6 +38,7 @@ interface ColumnReorderPrivateOptions {
   getHeaderHeight: () => number;
   showRowNumber: boolean;
   rowNumberWidth: number;
+  enabled?: boolean;
 }
 
 export class ColumnReorder extends EventEmitter<ColumnReorderEvents> {
@@ -71,6 +74,7 @@ export class ColumnReorder extends EventEmitter<ColumnReorderEvents> {
    * 挂载到容器
    */
   mount(container: HTMLElement): void {
+    if (this.options.enabled === false) return;
     this.container = container;
 
     // 创建拖拽幽灵元素

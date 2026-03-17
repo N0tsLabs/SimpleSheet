@@ -405,86 +405,144 @@ export function createDefaultMenuItems(handlers: {
   onShowAllRows?: (context: MenuContext) => void;
   onSortAsc?: (context: MenuContext) => void;
   onSortDesc?: (context: MenuContext) => void;
-}): MenuItem[] {
-  return [
-    {
+}, options?: { showCopy?: boolean; showCut?: boolean; showPaste?: boolean; showInsertRowAbove?: boolean; showInsertRowBelow?: boolean; showDeleteRow?: boolean; showInsertColumnLeft?: boolean; showInsertColumnRight?: boolean; showDeleteColumn?: boolean; showClearColumn?: boolean }): MenuItem[] {
+  const opts = {
+    showCopy: true,
+    showCut: true,
+    showPaste: true,
+    showInsertRowAbove: true,
+    showInsertRowBelow: true,
+    showDeleteRow: true,
+    showInsertColumnLeft: true,
+    showInsertColumnRight: true,
+    showDeleteColumn: true,
+    showClearColumn: true,
+    ...options,
+  };
+
+  const items: MenuItem[] = [];
+
+  // 基础操作
+  if (opts.showCopy) {
+    items.push({
       key: 'copy',
       label: '复制',
       icon: '📋',
       shortcut: 'Ctrl+C',
       action: (context) => handlers.onCopy?.(context),
-    },
-    {
+    });
+  }
+  if (opts.showCut) {
+    items.push({
       key: 'cut',
       label: '剪切',
       icon: '✂️',
       shortcut: 'Ctrl+X',
       action: (context) => handlers.onCut?.(context),
-    },
-    {
+    });
+  }
+  if (opts.showPaste) {
+    items.push({
       key: 'paste',
       label: '粘贴',
       icon: '📄',
       shortcut: 'Ctrl+V',
       action: (context) => handlers.onPaste?.(context),
-    },
-    { type: 'divider', label: '' },
-    {
+    });
+  }
+
+  if (items.length > 0) {
+    items.push({ type: 'divider', label: '' });
+  }
+
+  // 插入行子菜单
+  const rowChildren: MenuItem[] = [];
+  if (opts.showInsertRowAbove) {
+    rowChildren.push({
+      key: 'insertRowAbove',
+      label: '在上方插入',
+      action: (context) => handlers.onInsertRowAbove?.(context),
+    });
+  }
+  if (opts.showInsertRowBelow) {
+    rowChildren.push({
+      key: 'insertRowBelow',
+      label: '在下方插入',
+      action: (context) => handlers.onInsertRowBelow?.(context),
+    });
+  }
+  if (rowChildren.length > 0) {
+    items.push({
       key: 'insertRow',
       label: '插入行',
       icon: '➕',
-      children: [
-        {
-          key: 'insertRowAbove',
-          label: '在上方插入',
-          action: (context) => handlers.onInsertRowAbove?.(context),
-        },
-        {
-          key: 'insertRowBelow',
-          label: '在下方插入',
-          action: (context) => handlers.onInsertRowBelow?.(context),
-        },
-      ],
-    },
-    {
+      children: rowChildren,
+    });
+  }
+
+  // 插入列子菜单
+  const colChildren: MenuItem[] = [];
+  if (opts.showInsertColumnLeft) {
+    colChildren.push({
+      key: 'insertColumnLeft',
+      label: '在左侧插入',
+      action: (context) => handlers.onInsertColumnLeft?.(context),
+    });
+  }
+  if (opts.showInsertColumnRight) {
+    colChildren.push({
+      key: 'insertColumnRight',
+      label: '在右侧插入',
+      action: (context) => handlers.onInsertColumnRight?.(context),
+    });
+  }
+  if (colChildren.length > 0) {
+    items.push({
       key: 'insertColumn',
       label: '插入列',
       icon: '➕',
-      children: [
-        {
-          key: 'insertColumnLeft',
-          label: '在左侧插入',
-          action: (context) => handlers.onInsertColumnLeft?.(context),
-        },
-        {
-          key: 'insertColumnRight',
-          label: '在右侧插入',
-          action: (context) => handlers.onInsertColumnRight?.(context),
-        },
-      ],
-    },
-    { type: 'divider', label: '' },
-    {
+      children: colChildren,
+    });
+  }
+
+  if (rowChildren.length > 0 || colChildren.length > 0) {
+    items.push({ type: 'divider', label: '' });
+  }
+
+  // 删除操作
+  if (opts.showDeleteRow) {
+    items.push({
       key: 'deleteRow',
       label: '删除行',
       icon: '🗑️',
       action: (context) => handlers.onDeleteRow?.(context),
-    },
-    {
+    });
+  }
+  if (opts.showDeleteColumn) {
+    items.push({
       key: 'deleteColumn',
       label: '删除列',
       icon: '🗑️',
       action: (context) => handlers.onDeleteColumn?.(context),
-    },
-    { type: 'divider', label: '' },
-    {
+    });
+  }
+
+  if (opts.showDeleteRow || opts.showDeleteColumn) {
+    items.push({ type: 'divider', label: '' });
+  }
+
+  // 清除内容
+  if (opts.showClearColumn !== false) {
+    items.push({
       key: 'clearContent',
       label: '清除内容',
       icon: '🧹',
       shortcut: 'Delete',
       action: (context) => handlers.onClearContent?.(context),
-    },
-  ];
+    });
+  }
+
+  return items;
 }
 
 /**
@@ -502,83 +560,129 @@ export function createHeaderMenuItems(handlers: {
   onEditColumn?: (context: MenuContext) => void;
   onSetColumnReadonly?: (context: MenuContext, readonly: boolean) => void;
   getColumnReadonly?: (context: MenuContext) => boolean;
-}): MenuItem[] {
-  return [
-    {
-      key: 'editColumn',
-      label: '编辑列配置',
-      icon: '⚙️',
-      action: (context) => handlers.onEditColumn?.(context),
+}, options?: { showCopy?: boolean; showInsertColumnLeft?: boolean; showInsertColumnRight?: boolean; showDeleteColumn?: boolean; showSortAsc?: boolean; showSortDesc?: boolean; showFilter?: boolean }): MenuItem[] {
+  const opts = {
+    showCopy: true,
+    showInsertColumnLeft: true,
+    showInsertColumnRight: true,
+    showDeleteColumn: true,
+    showSortAsc: true,
+    showSortDesc: true,
+    showFilter: true,
+    ...options,
+  };
+
+  const items: MenuItem[] = [];
+
+  // 编辑列配置
+  items.push({
+    key: 'editColumn',
+    label: '编辑列配置',
+    icon: '⚙️',
+    action: (context) => handlers.onEditColumn?.(context),
+  });
+
+  items.push({ type: 'divider', label: '' });
+
+  // 设置为只读
+  items.push({
+    key: 'toggleReadonly',
+    label: '设置为只读',
+    icon: '🔒',
+    action: (context) => {
+      const currentReadonly = handlers.getColumnReadonly?.(context) ?? false;
+      handlers.onSetColumnReadonly?.(context, !currentReadonly);
     },
-    { type: 'divider', label: '' },
-    {
-      key: 'toggleReadonly',
-      label: '设置为只读',
-      icon: '🔒',
-      action: (context) => {
-        const currentReadonly = handlers.getColumnReadonly?.(context) ?? false;
-        handlers.onSetColumnReadonly?.(context, !currentReadonly);
-      },
-      // 动态更新标签
-      getLabel: (context) => {
-        const isReadonly = handlers.getColumnReadonly?.(context) ?? false;
-        return isReadonly ? '取消只读' : '设置为只读';
-      },
+    getLabel: (context) => {
+      const isReadonly = handlers.getColumnReadonly?.(context) ?? false;
+      return isReadonly ? '取消只读' : '设置为只读';
     },
-    { type: 'divider', label: '' },
-    {
+  });
+
+  items.push({ type: 'divider', label: '' });
+
+  // 复制整列
+  if (opts.showCopy) {
+    items.push({
       key: 'copyColumn',
       label: '复制整列',
       icon: '📋',
       action: (context) => handlers.onCopy?.(context),
-    },
-    { type: 'divider', label: '' },
-    {
+    });
+    items.push({ type: 'divider', label: '' });
+  }
+
+  // 排序
+  if (opts.showSortAsc) {
+    items.push({
       key: 'sortAsc',
       label: '升序排序',
       icon: '↑',
       action: (context) => handlers.onSortAsc?.(context),
-    },
-    {
+    });
+  }
+  if (opts.showSortDesc) {
+    items.push({
       key: 'sortDesc',
       label: '降序排序',
       icon: '↓',
       action: (context) => handlers.onSortDesc?.(context),
-    },
-    { type: 'divider', label: '' },
-    {
+    });
+  }
+
+  if (opts.showSortAsc || opts.showSortDesc) {
+    items.push({ type: 'divider', label: '' });
+  }
+
+  // 插入列
+  if (opts.showInsertColumnLeft) {
+    items.push({
       key: 'insertColumnLeft',
       label: '在左侧插入列',
       icon: '⬅️',
       action: (context) => handlers.onInsertColumnLeft?.(context),
-    },
-    {
+    });
+  }
+  if (opts.showInsertColumnRight) {
+    items.push({
       key: 'insertColumnRight',
       label: '在右侧插入列',
       icon: '➡️',
       action: (context) => handlers.onInsertColumnRight?.(context),
-    },
-    { type: 'divider', label: '' },
-    {
-      key: 'hideColumn',
-      label: '隐藏列',
-      icon: '👁️‍🗨️',
-      action: (context) => handlers.onHideColumn?.(context),
-    },
-    {
-      key: 'showAllColumns',
-      label: '显示所有隐藏列',
-      icon: '👁️',
-      action: (context) => handlers.onShowAllColumns?.(context),
-    },
-    { type: 'divider', label: '' },
-    {
+    });
+  }
+
+  if (opts.showInsertColumnLeft || opts.showInsertColumnRight) {
+    items.push({ type: 'divider', label: '' });
+  }
+
+  // 隐藏/显示列
+  items.push({
+    key: 'hideColumn',
+    label: '隐藏列',
+    icon: '👁️‍🗨️',
+    action: (context) => handlers.onHideColumn?.(context),
+  });
+  items.push({
+    key: 'showAllColumns',
+    label: '显示所有隐藏列',
+    icon: '👁️',
+    action: (context) => handlers.onShowAllColumns?.(context),
+  });
+
+  items.push({ type: 'divider', label: '' });
+
+  // 删除列
+  if (opts.showDeleteColumn) {
+    items.push({
       key: 'deleteColumn',
       label: '删除列',
       icon: '🗑️',
       action: (context) => handlers.onDeleteColumn?.(context),
-    },
-  ];
+    });
+  }
+
+  return items;
 }
 
 /**
@@ -591,47 +695,76 @@ export function createRowNumberMenuItems(handlers: {
   onDeleteRow?: (context: MenuContext) => void;
   onHideRow?: (context: MenuContext) => void;
   onShowAllRows?: (context: MenuContext) => void;
-}): MenuItem[] {
-  return [
-    {
+}, options?: { showCopy?: boolean; showInsertRowAbove?: boolean; showInsertRowBelow?: boolean; showDeleteRow?: boolean }): MenuItem[] {
+  const opts = {
+    showCopy: true,
+    showInsertRowAbove: true,
+    showInsertRowBelow: true,
+    showDeleteRow: true,
+    ...options,
+  };
+
+  const items: MenuItem[] = [];
+
+  // 复制整行
+  if (opts.showCopy) {
+    items.push({
       key: 'copyRow',
       label: '复制整行',
       icon: '📋',
       action: (context) => handlers.onCopy?.(context),
-    },
-    { type: 'divider', label: '' },
-    {
+    });
+    items.push({ type: 'divider', label: '' });
+  }
+
+  // 插入行
+  if (opts.showInsertRowAbove) {
+    items.push({
       key: 'insertRowAbove',
       label: '在上方插入行',
       icon: '⬆️',
       action: (context) => handlers.onInsertRowAbove?.(context),
-    },
-    {
+    });
+  }
+  if (opts.showInsertRowBelow) {
+    items.push({
       key: 'insertRowBelow',
       label: '在下方插入行',
       icon: '⬇️',
       action: (context) => handlers.onInsertRowBelow?.(context),
-    },
-    { type: 'divider', label: '' },
-    {
-      key: 'hideRow',
-      label: '隐藏行',
-      icon: '👁️‍🗨️',
-      action: (context) => handlers.onHideRow?.(context),
-    },
-    {
-      key: 'showAllRows',
-      label: '显示所有隐藏行',
-      icon: '👁️',
-      action: (context) => handlers.onShowAllRows?.(context),
-    },
-    { type: 'divider', label: '' },
-    {
+    });
+  }
+
+  if (opts.showInsertRowAbove || opts.showInsertRowBelow) {
+    items.push({ type: 'divider', label: '' });
+  }
+
+  // 隐藏/显示行
+  items.push({
+    key: 'hideRow',
+    label: '隐藏行',
+    icon: '👁️‍🗨️',
+    action: (context) => handlers.onHideRow?.(context),
+  });
+  items.push({
+    key: 'showAllRows',
+    label: '显示所有隐藏行',
+    icon: '👁️',
+    action: (context) => handlers.onShowAllRows?.(context),
+  });
+
+  items.push({ type: 'divider', label: '' });
+
+  // 删除行
+  if (opts.showDeleteRow) {
+    items.push({
       key: 'deleteRow',
       label: '删除行',
       icon: '🗑️',
       action: (context) => handlers.onDeleteRow?.(context),
-    },
-  ];
+    });
+  }
+
+  return items;
 }
 

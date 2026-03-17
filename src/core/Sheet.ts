@@ -201,7 +201,8 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             getCellFromPoint: (x, y) => this.renderer.getCellFromPoint(x, y),
             getSelection: () => this.selectionManager.getPrimaryRange(),
             maxRow: this.dataModel.getRowCount() || 1,
-            maxCol: this.dataModel.getColumnCount()
+            maxCol: this.dataModel.getColumnCount(),
+            enabled: this.options.features?.autoFill !== false
         });
 
         // 初始化行拖拽排序插件（支持自适应行高）
@@ -212,7 +213,8 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             getHeaderHeight: () => this.options.headerHeight,
             rowNumberWidth: this.options.rowNumberWidth,
             getScrollTop: () => this.renderer.getVirtualScroll().getScrollTop(),
-            getRowOffset: (rowIndex) => this.renderer.getRowOffset(rowIndex) // 支持自适应行高
+            getRowOffset: (rowIndex) => this.renderer.getRowOffset(rowIndex), // 支持自适应行高
+            enabled: this.options.features?.rowReorder !== false
         });
 
         // 初始化列拖拽排序插件
@@ -229,7 +231,8 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             getHeaderHeight: () => this.options.headerHeight,
             showRowNumber: this.options.showRowNumber,
             rowNumberWidth: this.options.rowNumberWidth,
-            clearSelection: () => this.clearSelection()
+            clearSelection: () => this.clearSelection(),
+            enabled: this.options.features?.columnReorder !== false
         });
 
         // 初始化文件粘贴处理器
@@ -240,7 +243,8 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                 this.dataModel.setCellValue(row, col, value);
                 this.renderer.refreshCell(row, col);
             },
-            getCellValue: (row, col) => this.dataModel.getCellValue(row, col)
+            getCellValue: (row, col) => this.dataModel.getCellValue(row, col),
+            enabled: this.options.features?.filePaste !== false
         });
 
         // 初始化列宽调整插件
@@ -253,7 +257,8 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                 }
             },
             minWidth: 50,
-            maxWidth: 500
+            maxWidth: 500,
+            enabled: this.options.features?.columnResize !== false
         });
 
         // 初始化内置插件（根据 features 配置）
@@ -357,7 +362,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                 onDeleteColumn: (ctx) => {
                     if (ctx.position) this.deleteColumn(ctx.position.col);
                 },
-            }),
+            }, menuOptions),
         });
         this.contextMenu.mount(document.body);
         this.setContextMenu(this.contextMenu);
@@ -422,7 +427,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                     }
                     return false;
                 },
-            }),
+            }, menuOptions),
         });
         this.headerContextMenu.mount(document.body);
 
@@ -443,7 +448,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                     if (ctx.rowNumberIndex !== undefined) this.hideRow(ctx.rowNumberIndex);
                 },
                 onShowAllRows: () => this.showAllRows(),
-            }),
+            }, menuOptions),
         });
         this.rowNumberContextMenu.mount(document.body);
 
@@ -808,12 +813,12 @@ export class Sheet extends EventEmitter<SheetEventMap> {
 
                 // 如果包含只读单元格，不显示填充手柄
                 if (hasReadonlyCell) {
-                    this.autoFill.hideHandle();
+                    this.autoFill?.hideHandle();
                 } else {
-                    this.autoFill.updateHandlePosition(primaryRange);
+                    this.autoFill?.updateHandlePosition(primaryRange);
                 }
             } else {
-                this.autoFill.hideHandle();
+                this.autoFill?.hideHandle();
             }
 
             // 多行文本预览现在通过点击悬浮窗统一处理，不再使用展开覆盖层

@@ -29,6 +29,8 @@ interface FilePasteHandlerOptions {
   acceptedTypes?: string[];
   /** 最大文件大小（字节） */
   maxFileSize?: number;
+  /** 是否启用 */
+  enabled?: boolean;
 }
 
 /**
@@ -75,6 +77,7 @@ export class FilePasteHandler extends EventEmitter<FilePasteEvents> {
     this.options = {
       acceptedTypes: ['image/*', 'application/pdf', '.doc', '.docx', '.xls', '.xlsx'],
       maxFileSize: 10 * 1024 * 1024, // 10MB
+      enabled: true,
       ...options,
     };
     this.uploader = options.uploader || new DefaultUploader();
@@ -92,6 +95,9 @@ export class FilePasteHandler extends EventEmitter<FilePasteEvents> {
    */
   mount(container: HTMLElement): void {
     this.container = container;
+
+    // 如果禁用则不挂载
+    if (this.options.enabled === false) return;
 
     // 在 window 上监听粘贴事件，这样无论焦点在哪里都能捕获
     const handleWindowPaste = async (e: ClipboardEvent) => {
