@@ -230,8 +230,18 @@ const initSheet = async () => {
   sheet.on('selection:change', () => {});
   sheet.on('copy', () => log('已复制'));
   sheet.on('paste', () => log('已粘贴'));
-  sheet.on('row:insert', () => {});
-  sheet.on('row:delete', () => {});
+  sheet.on('row:insert', (e) => {
+    log(`插入行：位置${e.index + 1}`);
+  });
+  sheet.on('row:delete', (e) => {
+    log(`删除行：位置${e.index + 1}`);
+  });
+  sheet.on('column:insert', (e) => {
+    log(`插入列：位置${e.index + 1}`);
+  });
+  sheet.on('column:delete', (e) => {
+    log(`删除列：位置${e.index + 1}`);
+  });
 
   // 文件上传事件
   sheet.on('file:paste:start', (e: any) => {
@@ -695,8 +705,12 @@ return {
   onRowInsert: (e) => console.log('插入行：位置' + (e.index + 1)),
   onRowDelete: (e) => console.log('删除行：位置' + (e.index + 1)),
   onRowReorder: (e) => console.log('行排序：从' + (e.fromIndex + 1) + '到' + (e.toIndex + 1)),
+  onRowHide: (e) => console.log('隐藏行：行' + (e.index + 1)),
+  onRowShow: (e) => console.log('显示行：行' + (e.index + 1)),
   
   // 列事件
+  onColumnInsert: (e) => console.log('插入列：位置' + (e.index + 1)),
+  onColumnDelete: (e) => console.log('删除列：位置' + (e.index + 1)),
   onColumnResize: (e) => console.log('列宽调整：列' + (e.column + 1) + ', ' + e.oldWidth + 'px → ' + e.newWidth + 'px'),
   onColumnReorder: (e) => console.log('列排序：从' + (e.fromIndex + 1) + '到' + (e.toIndex + 1)),
   onColumnHide: (e) => console.log('隐藏列：列' + (e.index + 1)),
@@ -726,10 +740,14 @@ return {
   
   // 验证事件
   onValidationError: (e) => console.log('验证错误：行' + (e.row + 1) + ', 列' + (e.col + 1) + ' - ' + e.message),
+  
+  // 历史事件
+  onUndo: () => console.log('撤销操作'),
+  onRedo: () => console.log('重做操作'),
 };`;
 
 // 代码版本号（每次修改 defaultEditorCode 时更新）
-const CODE_VERSION = 'v4';
+const CODE_VERSION = 'v6';
 
 // 初始化编辑器代码
 const initEditorCode = () => {
@@ -859,22 +877,21 @@ const bindEventListeners = (config: any) => {
   // 数据变更事件
   if (config.onDataChange) {
     sheet.on('data:change', (e) => {
-      log(`数据变更：行${e.row + 1}, 列${e.col + 1}`);
+      const row = e.row ?? e.changes[0]?.row ?? 0;
+      const col = e.col ?? e.changes[0]?.col ?? 0;
+      log(`数据变更：行${row + 1}, 列${col + 1}`);
       config.onDataChange(e);
     });
   }
-  if (config.onRowInsert) {
-    sheet.on('row:insert', (e) => {
-      log(`插入行：位置${e.index + 1}`);
-      config.onRowInsert(e);
-    });
-  }
-  if (config.onRowDelete) {
-    sheet.on('row:delete', (e) => {
-      log(`删除行：位置${e.index + 1}`);
-      config.onRowDelete(e);
-    });
-  }
+  // 行插入删除事件 - 始终监听，不依赖配置
+  sheet.on('row:insert', (e) => {
+    log(`插入行：位置${e.index + 1}`);
+    config.onRowInsert?.(e);
+  });
+  sheet.on('row:delete', (e) => {
+    log(`删除行：位置${e.index + 1}`);
+    config.onRowDelete?.(e);
+  });
   if (config.onRowReorder) {
     sheet.on('row:reorder', (e) => {
       log(`行排序：从${e.fromIndex + 1}到${e.toIndex + 1}`);
@@ -882,10 +899,18 @@ const bindEventListeners = (config: any) => {
     });
   }
 
-  // 列事件
+  // 列事件 - 始终监听，不依赖配置
+  sheet.on('column:insert', (e) => {
+    log(`插入列：位置${e.index + 1}`);
+    config.onColumnInsert?.(e);
+  });
+  sheet.on('column:delete', (e) => {
+    log(`删除列：位置${e.index + 1}`);
+    config.onColumnDelete?.(e);
+  });
   if (config.onColumnResize) {
     sheet.on('column:resize', (e) => {
-      log(`列宽调整：列${e.column + 1}, ${e.oldWidth}px → ${e.newWidth}px`);
+      log(`列宽调整：列${e.index + 1}, ${e.oldWidth}px → ${e.newWidth}px`);
       config.onColumnResize(e);
     });
   }
@@ -935,6 +960,28 @@ const bindEventListeners = (config: any) => {
       config.onCut(e);
     });
   }
+
+  // 历史事件
+  if (config.onUndo) {
+    sheet.on('undo', (e) => {
+      log(`撤销操作`);
+      config.onUndo(e);
+    });
+  }
+  if (config.onRedo) {
+    sheet.on('redo', (e) => {
+      log(`重做操作`);
+      config.onRedo(e);
+    });
+  }
+
+  // 行隐藏/显示事件
+  sheet.on('row:hide', (e) => {
+    log(`隐藏行：行${e.index + 1}`);
+  });
+  sheet.on('row:show', (e) => {
+    log(`显示行：行${e.index + 1}`);
+  });
 
   // 排序事件
   if (config.onSortChange) {

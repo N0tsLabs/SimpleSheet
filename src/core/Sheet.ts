@@ -135,6 +135,9 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     // 排序触发延迟（等待区分点击和拖拽）
     private sortTriggerTimeout: number | null = null;
 
+    // 标记是否刚刚点击了表头（用于控制悬浮窗显示）
+    private justClickedHeader = false;
+
     constructor(container: string | HTMLElement, options: SheetOptions) {
         super();
 
@@ -408,6 +411,17 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                     }
                 },
                 onShowAllColumns: () => this.showAllColumns(),
+                onSetColumnReadonly: (ctx, readonly) => {
+                    if (ctx.headerColIndex !== undefined) {
+                        this.updateColumn(ctx.headerColIndex, { readonly });
+                    }
+                },
+                getColumnReadonly: (ctx) => {
+                    if (ctx.headerColIndex !== undefined) {
+                        return this.options.columns[ctx.headerColIndex]?.readonly === true;
+                    }
+                    return false;
+                },
             }),
         });
         this.headerContextMenu.mount(document.body);
@@ -502,6 +516,9 @@ export class Sheet extends EventEmitter<SheetEventMap> {
 
         // 设置列隐藏检查函数
         this.renderer.setColumnHiddenFn((col) => this.dataModel.isColumnHidden(col));
+        
+        // 设置行隐藏检查函数
+        this.renderer.setRowHiddenFn((row) => this.dataModel.isRowHidden(row));
 
         // 设置单元格值变化回调（用于复选框等直接点击修改的场景）
         this.renderer.setOnCellChange((row, col, value) => {
@@ -737,7 +754,8 @@ export class Sheet extends EventEmitter<SheetEventMap> {
 
             // 处理悬浮窗跟随高亮单元格（键盘导航时）
             // 如果正在粘贴操作中，跳过自动显示悬浮窗（由粘贴事件处理）
-            if (!this.isPasting) {
+            // 如果刚刚点击了表头，也不显示悬浮窗
+            if (!this.isPasting && !this.justClickedHeader) {
                 const activeCell = this.selectionManager.getActiveCell();
                 if (activeCell) {
                     const cellEl = this.renderer.getCellElement(activeCell.row, activeCell.col);
@@ -1097,6 +1115,9 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                     return;
                 }
 
+                // 标记刚刚点击了表头（用于控制悬浮窗不显示）
+                this.justClickedHeader = true;
+
                 // 点击其他区域：选中整列（方便拖拽排序）
                 const maxRow = this.dataModel.getRowCount() - 1;
                 if (e.shiftKey && this.options.allowMultiSelect) {
@@ -1111,6 +1132,12 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                 }
                 this.renderer.render();
                 this.emit("column:select", { col: colIndex, originalEvent: e });
+                
+                // 延迟重置标志，让选区变更事件处理能检测到这个标志
+                setTimeout(() => {
+                    this.justClickedHeader = false;
+                }, 0);
+                
                 return;
             }
         }
@@ -2712,16 +2739,30 @@ export class Sheet extends EventEmitter<SheetEventMap> {
      * 隐藏行
      */
     hideRow(index: number): void {
+        const rowData = this.dataModel.getRowData(index);
         this.dataModel.hideRow(index);
         this.renderer.render();
+        
+        // 触发行隐藏事件
+        this.emit('row:hide', { index, rowData: rowData || {} });
+        
+        // 触发配置变更事件
+        this.emitConfigChange('row-hide', { index });
     }
 
     /**
      * 显示行
      */
     showRow(index: number): void {
+        const rowData = this.dataModel.getRowData(index);
         this.dataModel.showRow(index);
         this.renderer.render();
+        
+        // 触发行显示事件
+        this.emit('row:show', { index, rowData: rowData || {} });
+        
+        // 触发配置变更事件
+        this.emitConfigChange('row-show', { index });
     }
 
     /**

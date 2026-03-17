@@ -69,6 +69,9 @@ export class Renderer {
   /** 列隐藏检查函数 */
   private isColumnHiddenFn: ((col: number) => boolean) | null = null;
   
+  /** 行隐藏检查函数 */
+  private isRowHiddenFn: ((row: number) => boolean) | null = null;
+  
   /** 可见列索引数组（用于隐藏列功能） */
   private visibleColIndices: number[] | null = null;
   
@@ -219,6 +222,15 @@ export class Renderer {
     this.updateVisibleColIndices();
     // 同时更新 VirtualScroll 的列隐藏函数
     (this.virtualScroll as any).isColumnHiddenFn = isColumnHidden;
+  }
+  
+  /**
+   * 设置行隐藏检查函数
+   */
+  setRowHiddenFn(isRowHidden: (row: number) => boolean): void {
+    this.isRowHiddenFn = isRowHidden;
+    // 同时更新 VirtualScroll 的行隐藏函数
+    (this.virtualScroll as any).isRowHiddenFn = isRowHidden;
   }
   
   /**
@@ -816,6 +828,12 @@ export class Renderer {
     for (let rowIndex = startRow; rowIndex <= endRow; rowIndex++) {
       // 确保行索引有效
       if (rowIndex < 0 || rowIndex >= this.options.rowCount) {
+        continue;
+      }
+      
+      // 检查行是否隐藏
+      if (this.isRowHiddenFn && this.isRowHiddenFn(rowIndex)) {
+        // 行被隐藏，跳过
         continue;
       }
       

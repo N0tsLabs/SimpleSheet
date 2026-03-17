@@ -1241,6 +1241,26 @@ sheet.on('column:show', (e) => {
 });
 ```
 
+### 行隐藏/显示事件示例
+
+```typescript
+// 监听行隐藏事件
+sheet.on('row:hide', (e) => {
+  console.log(`隐藏了第 ${e.index + 1} 行`);
+  // 可以在这里保存用户的行显示偏好
+});
+
+// 监听行显示事件
+sheet.on('row:show', (e) => {
+  console.log(`显示了第 ${e.index + 1} 行`);
+});
+
+// API 方法
+sheet.hideRow(index);  // 隐藏指定行
+sheet.showRow(index);  // 显示指定行
+sheet.isRowHidden(index);  // 检查行是否隐藏
+```
+
 ### 文件上传事件示例
 
 ```typescript

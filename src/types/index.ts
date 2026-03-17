@@ -547,12 +547,16 @@ export interface SheetEventMap {
   'row:insert': RowEvent;
   'row:delete': RowEvent;
   'row:select': RowSelectEvent;
+  'row:hide': RowHideEvent;
+  'row:show': RowShowEvent;
+  'row:reorder': RowReorderEvent;
   'column:resize': ColumnResizeEvent;
   'column:insert': ColumnInsertEvent;
   'column:delete': ColumnDeleteEvent;
   'column:select': ColumnSelectEvent;
   'column:hide': ColumnHideEvent;
   'column:show': ColumnShowEvent;
+  'column:reorder': ColumnReorderEvent;
   
   // 选择事件
   'selection:change': SelectionEvent;
@@ -563,6 +567,7 @@ export interface SheetEventMap {
   // 剪贴板事件
   'copy': ClipboardEvent;
   'paste': ClipboardEvent;
+  'cut': ClipboardEvent;
   
   // 历史事件
   'undo': HistoryEvent;
@@ -572,8 +577,22 @@ export interface SheetEventMap {
   'sort:change': SortEvent;
   'sort:custom': SortCustomEvent;
 
+  // 筛选事件
+  'filter:change': FilterChangeEvent;
+
+  // 文件上传事件
+  'file:paste:start': FilePasteStartEvent;
+  'file:paste': FilePasteEvent;
+  'file:paste:error': FilePasteErrorEvent;
+
+  // 验证事件
+  'validation:error': ValidationErrorEvent;
+
   // 配置变更事件
   'config:change': SheetConfigChangeEvent;
+
+  // 日志事件
+  'log': LogEvent;
 }
 
 /**
@@ -587,9 +606,12 @@ export type ConfigChangeType =
   | 'column-delete'  // 列删除
   | 'column-hide'    // 列隐藏
   | 'column-show'    // 列显示
+  | 'column-update'  // 列配置更新
   | 'row-reorder'    // 行顺序调整
   | 'row-insert'     // 行插入
   | 'row-delete'     // 行删除
+  | 'row-hide'       // 行隐藏
+  | 'row-show'       // 行显示
   | 'freeze'         // 冻结设置变更
   | 'merge'          // 合并单元格
   | 'filter'         // 筛选变更
@@ -677,6 +699,11 @@ export interface DataChangeEvent {
     oldValue: any;
     newValue: any;
   }>;
+  // 单个变更的快捷访问（兼容旧代码）
+  row?: number;
+  col?: number;
+  oldValue?: any;
+  newValue?: any;
 }
 
 /**
@@ -711,6 +738,94 @@ export interface ColumnHideEvent {
 export interface ColumnShowEvent {
   index: number;
   column: Column;
+}
+
+/**
+ * 行隐藏事件
+ */
+export interface RowHideEvent {
+  index: number;
+  rowData: RowData;
+}
+
+/**
+ * 行显示事件
+ */
+export interface RowShowEvent {
+  index: number;
+  rowData: RowData;
+}
+
+/**
+ * 行排序事件
+ */
+export interface RowReorderEvent {
+  fromIndex: number;
+  toIndex: number;
+  rowData: RowData;
+}
+
+/**
+ * 列排序事件
+ */
+export interface ColumnReorderEvent {
+  fromIndex: number;
+  toIndex: number;
+  column: Column;
+}
+
+/**
+ * 筛选变更事件
+ */
+export interface FilterChangeEvent {
+  filters: FilterCondition[];
+}
+
+/**
+ * 文件粘贴开始事件
+ */
+export interface FilePasteStartEvent {
+  files: File[];
+  row: number;
+  col: number;
+}
+
+/**
+ * 文件粘贴成功事件
+ */
+export interface FilePasteEvent {
+  result: FileUploadResult;
+  row: number;
+  col: number;
+}
+
+/**
+ * 文件粘贴错误事件
+ */
+export interface FilePasteErrorEvent {
+  file: File;
+  error: Error;
+  row: number;
+  col: number;
+}
+
+/**
+ * 验证错误事件
+ */
+export interface ValidationErrorEvent {
+  row: number;
+  col: number;
+  message: string;
+  value: any;
+}
+
+/**
+ * 日志事件
+ */
+export interface LogEvent {
+  message: string;
+  type?: 'info' | 'warn' | 'error';
+  timestamp?: number;
 }
 
 /**

@@ -11,6 +11,8 @@ export interface MenuItem {
   key?: string;
   /** 显示文本 */
   label: string;
+  /** 动态获取标签（优先级高于 label） */
+  getLabel?: (context: MenuContext) => string;
   /** 图标（可选） */
   icon?: string;
   /** 快捷键提示 */
@@ -275,9 +277,12 @@ export class ContextMenu {
         menuItem.appendChild(icon);
       }
 
-      // 文本
+      // 文本（支持动态标签）
       const label = createElement('span', 'ss-menu-label');
-      label.textContent = item.label;
+      const labelText = item.getLabel && this.currentContext
+        ? item.getLabel(this.currentContext)
+        : item.label;
+      label.textContent = labelText;
       menuItem.appendChild(label);
 
       // 快捷键
@@ -495,6 +500,8 @@ export function createHeaderMenuItems(handlers: {
   onSortAsc?: (context: MenuContext) => void;
   onSortDesc?: (context: MenuContext) => void;
   onEditColumn?: (context: MenuContext) => void;
+  onSetColumnReadonly?: (context: MenuContext, readonly: boolean) => void;
+  getColumnReadonly?: (context: MenuContext) => boolean;
 }): MenuItem[] {
   return [
     {
@@ -502,6 +509,21 @@ export function createHeaderMenuItems(handlers: {
       label: '编辑列配置',
       icon: '⚙️',
       action: (context) => handlers.onEditColumn?.(context),
+    },
+    { type: 'divider', label: '' },
+    {
+      key: 'toggleReadonly',
+      label: '设置为只读',
+      icon: '🔒',
+      action: (context) => {
+        const currentReadonly = handlers.getColumnReadonly?.(context) ?? false;
+        handlers.onSetColumnReadonly?.(context, !currentReadonly);
+      },
+      // 动态更新标签
+      getLabel: (context) => {
+        const isReadonly = handlers.getColumnReadonly?.(context) ?? false;
+        return isReadonly ? '取消只读' : '设置为只读';
+      },
     },
     { type: 'divider', label: '' },
     {

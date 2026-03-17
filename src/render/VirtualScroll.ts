@@ -31,6 +31,8 @@ interface VirtualScrollOptions {
   getTotalHeight?: () => number;
   /** 列隐藏检查函数 */
   isColumnHidden?: (col: number) => boolean;
+  /** 行隐藏检查函数 */
+  isRowHidden?: (row: number) => boolean;
 }
 
 export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
@@ -47,6 +49,7 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
   private showRowNumber: boolean;
   private getTotalHeightFn?: () => number;
   private isColumnHiddenFn?: (col: number) => boolean;
+  private isRowHiddenFn?: (row: number) => boolean;
 
   /** 内部行高缓存（支持动态行高） */
   private rowHeights: Map<number, number> = new Map();
@@ -84,6 +87,7 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
     this.showRowNumber = options.showRowNumber ?? true;
     this.getTotalHeightFn = options.getTotalHeight;
     this.isColumnHiddenFn = options.isColumnHidden;
+    this.isRowHiddenFn = options.isRowHidden;
   }
 
   /**
