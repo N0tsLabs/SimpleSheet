@@ -179,6 +179,8 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             verticalPadding: this.options.verticalPadding,
             // 传递预计算的行高
             rowHeights: this.options.rowHeights,
+            // 传递全局只读配置
+            readonly: this.options.readonly,
         });
 
         // 初始化自动填充插件
@@ -1517,7 +1519,8 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                 rowData
             });
         } else if (column.type === 'select') {
-            // 对于只读列，不传递 onChange 回调，显示为只读模式
+            // 对于只读列或全局只读，不传递 onChange 回调，显示为只读模式
+            const isReadonly = this.options.readonly || column.readonly;
             showPopover(cellEl, cellValue, rowData, {
                 type: 'tags',
                 tagsField: column.key,
@@ -1528,7 +1531,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                     textColor: opt.textColor
                 })) || [],
                 multiple: column.multiple ?? false,
-                ...(column.readonly ? {} : {
+                ...(isReadonly ? {} : {
                     onChange: (newValue: any) => {
                         this.dataModel.setCellValue(row, col, newValue);
                         this.renderer.render();
@@ -2107,6 +2110,9 @@ export class Sheet extends EventEmitter<SheetEventMap> {
      * 开始编辑单元格
      */
     private startEdit(row: number, col: number): void {
+        // 检查全局只读或列只读
+        if (this.options.readonly) return;
+        
         const column = this.options.columns[col];
         if (column?.readonly) return;
 

@@ -573,6 +573,12 @@ return {
   // 数据
   data: (() => {
     const names = ['张伟', '李娜', '王芳', '刘洋', '陈明', '杨静', '赵强', '黄丽', '周杰', '吴敏'];
+    const remarks = [
+      '表现优秀', '工作认真\\n态度积极', '团队协作能力强\\n沟通顺畅',
+      '需要加强技术能力', '表现稳定', '有潜力\\n值得培养', '',
+      '绩效达标', '这是一段很长的备注文本，用于测试省略号显示效果',
+      '多行文本测试\\n第二行\\n第三行内容',
+    ];
     const deptValues = ['tech', 'product', 'design', 'market', 'operation'];
     const statusValues = ['active', 'probation', 'resigned', 'vacation'];
     const tagValues = ['core', 'tech_lead', 'newcomer', 'management', 'remote'];
@@ -605,7 +611,7 @@ return {
         joinDate: '202'+Math.floor(Math.random() * 4)+'-'+String(1 + Math.floor(Math.random() * 12)).padStart(2, '0')+'-'+String(1 + Math.floor(Math.random() * 28)).padStart(2, '0'),
         website: i % 3 === 0 ? 'https://github.com/user'+(i + 1) : '',
         tags: selectedTags,
-        remark: i % 10 === 0 ? '表现优秀，值得培养' : '',
+        remark: remarks[i % remarks.length],
       });
     }
     return data;
@@ -722,10 +728,22 @@ return {
   onValidationError: (e) => console.log('验证错误：行' + (e.row + 1) + ', 列' + (e.col + 1) + ' - ' + e.message),
 };`;
 
+// 代码版本号（每次修改 defaultEditorCode 时更新）
+const CODE_VERSION = 'v4';
+
 // 初始化编辑器代码
 const initEditorCode = () => {
+  const savedVersion = localStorage.getItem('simple-sheet-demo-code-version');
   const saved = localStorage.getItem('simple-sheet-demo-code-v3');
-  editorCode.value = saved || defaultEditorCode;
+  
+  // 如果版本不匹配或没有保存的代码，使用默认代码
+  if (savedVersion !== CODE_VERSION || !saved) {
+    editorCode.value = defaultEditorCode;
+    localStorage.setItem('simple-sheet-demo-code-v3', defaultEditorCode);
+    localStorage.setItem('simple-sheet-demo-code-version', CODE_VERSION);
+  } else {
+    editorCode.value = saved;
+  }
 };
 
 // 应用代码
@@ -986,6 +1004,7 @@ const resetCode = () => {
     monacoEditor.setValue(defaultEditorCode);
   }
   localStorage.removeItem('simple-sheet-demo-code-v3');
+  localStorage.removeItem('simple-sheet-demo-code-version');
   currentConfig = null;
   log('🔄 代码已重置为默认');
 };

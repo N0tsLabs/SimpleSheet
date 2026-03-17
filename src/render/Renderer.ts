@@ -31,6 +31,8 @@ interface RendererOptions {
   verticalPadding?: number;
   /** 预计算的行高（用于 wrapText 模式） */
   rowHeights?: Map<number, number>;
+  /** 全局只读 */
+  readonly?: boolean;
 }
 
 export class Renderer {
@@ -1245,13 +1247,18 @@ export class Renderer {
       cell.textContent = '';
     }
     
+    // 应用只读样式（全局只读、列只读或单元格只读）
+    const isReadonly = this.options.readonly === true || column.readonly === true || meta?.readonly === true;
+    
     // 渲染内容（如果有预览状态，跳过渲染以避免覆盖预览内容）
     if (!hasPreview) {
-      renderer.render(cell, value, rowData, column);
+      // 传递包含全局只读状态的列配置
+      const columnWithReadonly = {
+        ...column,
+        readonly: isReadonly,
+      };
+      renderer.render(cell, value, rowData, columnWithReadonly);
     }
-    
-    // 应用只读样式（只有当明确设置为 true 时才应用）
-    const isReadonly = column.readonly === true || meta?.readonly === true;
     
     // 应用单元格元数据样式
     const baseClasses = ['ss-cell'];
