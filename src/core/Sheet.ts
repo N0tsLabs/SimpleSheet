@@ -1517,6 +1517,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                 rowData
             });
         } else if (column.type === 'select') {
+            // 对于只读列，不传递 onChange 回调，显示为只读模式
             showPopover(cellEl, cellValue, rowData, {
                 type: 'tags',
                 tagsField: column.key,
@@ -1527,19 +1528,21 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                     textColor: opt.textColor
                 })) || [],
                 multiple: column.multiple ?? false,
-                onChange: (newValue: any) => {
-                    this.dataModel.setCellValue(row, col, newValue);
-                    this.renderer.render();
-                    this.emit("data:change", {
-                        type: "set",
-                        changes: [{
-                            row,
-                            col,
-                            oldValue: cellValue,
-                            newValue
-                        }]
-                    });
-                }
+                ...(column.readonly ? {} : {
+                    onChange: (newValue: any) => {
+                        this.dataModel.setCellValue(row, col, newValue);
+                        this.renderer.render();
+                        this.emit("data:change", {
+                            type: "set",
+                            changes: [{
+                                row,
+                                col,
+                                oldValue: cellValue,
+                                newValue
+                            }]
+                        });
+                    }
+                })
             }, {
                 type: 'select',
                 column,

@@ -697,7 +697,7 @@ return {
   onColumnShow: (e) => console.log('显示列：列' + (e.index + 1)),
   
   // 选区事件
-  onSelectionChange: (e) => console.log('选区变更：' + e.rows.length + '行 x ' + e.cols.length + '列'),
+  onSelectionChange: (e) => console.log('选区变更：' + (e.ranges?.length || 0) + '个范围, ' + (e.cells?.length || 0) + '个单元格'),
   
   // 复制粘贴事件
   onCopy: (e) => console.log('复制：' + e.data.length + '个单元格'),
@@ -893,7 +893,7 @@ const bindEventListeners = (config: any) => {
   // 选区事件
   if (config.onSelectionChange) {
     sheet.on('selection:change', (e) => {
-      log(`选区变更：${e.rows?.length || 0}行 x ${e.cols?.length || 0}列`);
+      log(`选区变更：${e.ranges?.length || 0}个范围, ${e.cells?.length || 0}个单元格`);
       config.onSelectionChange(e);
     });
   }
