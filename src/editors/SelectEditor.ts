@@ -238,8 +238,14 @@ export class SelectEditor extends BaseEditor {
     this.selectedValue = opt.value;
     this.updateTriggerDisplay();
     this.closeDropdown();
-    // 模拟 Enter 键触发完成编辑
-    this.trigger?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    // 触发自定义事件通知编辑完成
+    // 使用 setTimeout 确保在事件循环的下一个周期执行，避免与当前事件冲突
+    setTimeout(() => {
+      this.trigger?.dispatchEvent(new CustomEvent('editor:complete', {
+        detail: { value: opt.value },
+        bubbles: true
+      }));
+    }, 0);
   }
 
   private updateTriggerDisplay(): void {

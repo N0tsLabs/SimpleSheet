@@ -285,6 +285,11 @@ export class EditorManager extends EventEmitter<EditorEvents> {
     };
 
     inputElement.addEventListener('input', handleInput);
+    
+    // 监听编辑器完成事件（用于 SelectEditor 等自定义编辑器）
+    inputElement.addEventListener('editor:complete', () => {
+      this.endEdit();
+    });
   }
 
   /**
