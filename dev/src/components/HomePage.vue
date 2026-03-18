@@ -226,7 +226,6 @@ const initSheet = async () => {
   sheet.on('cell:click', (e) => {
     log(`点击单元格：行${e.row + 1}, 列${e.col + 1}`);
   });
-  sheet.on('edit:end', () => {});
   sheet.on('selection:change', () => {});
   sheet.on('copy', () => log('已复制'));
   sheet.on('paste', () => log('已粘贴'));
@@ -751,7 +750,7 @@ return {
   onCellClick: (e) => console.log('点击单元格：行' + (e.row + 1) + ', 列' + (e.col + 1)),
   onCellDoubleClick: (e) => console.log('双击单元格：行' + (e.row + 1) + ', 列' + (e.col + 1)),
   onEditStart: (e) => console.log('开始编辑：行' + (e.row + 1) + ', 列' + (e.col + 1)),
-  onEditEnd: (e) => console.log('结束编辑：行' + (e.row + 1) + ', 列' + (e.col + 1) + ', 值：' + e.value),
+  onEditEnd: (e) => console.log('结束编辑：行' + (e.row + 1) + ', 列' + (e.col + 1) + ', 值：' + e.newValue),
   
   // 数据变更事件 - 每次单元格数据变化时触发
   onDataChange: (e) => {
@@ -928,12 +927,14 @@ const bindEventListeners = (config: any) => {
       config.onEditStart(e);
     });
   }
-  if (config.onEditEnd) {
-    sheet.on('edit:end', (e) => {
-      log(`结束编辑：行${e.row + 1}, 列${e.col + 1}`);
+  // 强制监听 edit:end 事件，使用正确的 newValue 属性
+  sheet.on('edit:end', (e) => {
+    log(`结束编辑：行${e.row + 1}, 列${e.col + 1}, 值：${e.newValue}`);
+    // 如果配置中有 onEditEnd，也调用它（但可能使用错误的属性名）
+    if (config.onEditEnd) {
       config.onEditEnd(e);
-    });
-  }
+    }
+  });
 
   // 数据变更事件 - 始终监听，实时打印所有数据变更
   sheet.on('data:change', (e) => {

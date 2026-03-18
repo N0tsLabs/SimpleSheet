@@ -400,6 +400,42 @@
   color: var(--ss-text-secondary, #9ca3af);
 }
 
+/* 单个非图片文件图标 */
+.ss-cell-file-icon-only {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: 14px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.ss-cell-file-icon-only:hover {
+  transform: scale(1.1);
+}
+
+/* 单个非图片文件名称标签 */
+.ss-cell-file-name-label {
+  font-size: 11px;
+  color: var(--ss-text-color, #374151);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  flex-shrink: 1;
+  flex-grow: 1;
+  cursor: pointer;
+  line-height: 1.2;
+  min-width: 0;
+}
+
+[data-theme="dark"] .ss-cell-file-name-label {
+  color: var(--ss-text-color, #d1d5db);
+}
+
 /* ========================================
    选择/标签渲染器样式
    ======================================== */

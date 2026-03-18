@@ -67,11 +67,8 @@ export class FileRenderer extends BaseRenderer {
         imgWrapper.appendChild(img);
         container.appendChild(imgWrapper);
       } else {
-        // 非图片文件 - 只显示图标
-        const fileIcon = createElement('div', 'ss-cell-file-icon-only');
-        fileIcon.textContent = this.getFileIcon(firstFile.type, firstFile.name);
-        fileIcon.title = firstFile.name || this.getFileName(firstFile.url);
-        container.appendChild(fileIcon);
+        // 非图片文件 - 不在这里显示图标，后面统一处理
+        // 图标和文件名会在下面根据情况显示
       }
     }
 
@@ -82,7 +79,7 @@ export class FileRenderer extends BaseRenderer {
       moreBadge.title = `共 ${remainingCount + 1} 个文件`;
       container.appendChild(moreBadge);
     } else if (files.length === 1 && !this.isImageUrl(firstFile.url, firstFile.type)) {
-      // 单个非图片文件，显示文件名
+      // 单个非图片文件，只显示文件名，不显示图标
       const nameLabel = createElement('span', 'ss-cell-file-name-label');
       nameLabel.textContent = firstFile.name || this.getFileName(firstFile.url);
       nameLabel.title = firstFile.name || firstFile.url;

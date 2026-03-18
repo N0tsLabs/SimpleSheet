@@ -25,6 +25,7 @@ interface ActiveEditor {
   editor: CellEditor;
   container: HTMLElement;
   originalValue: any;
+  completeHandler?: () => void;
 }
 
 export class EditorManager extends EventEmitter<EditorEvents> {
@@ -151,10 +152,21 @@ export class EditorManager extends EventEmitter<EditorEvents> {
    */
   endEdit(): { row: number; col: number; value: any } | null {
     if (!this.activeEditor) {
+      console.log('[EditorManager] endEdit called but no active editor');
       return null;
     }
     
-    const { row, col, editor, container, originalValue } = this.activeEditor;
+    const { row, col, editor, container, originalValue, completeHandler } = this.activeEditor;
+    
+    console.log('[EditorManager] endEdit called for row:', row, 'col:', col);
+    
+    // 先移除事件监听器，避免在销毁过程中触发事件
+    if (completeHandler) {
+      const editorElement = (editor as any).trigger || (editor as any).input || (editor as any).textarea;
+      if (editorElement) {
+        editorElement.removeEventListener('editor:complete', completeHandler);
+      }
+    }
     
     // 验证
     const validation = editor.validate?.() ?? true;
@@ -164,6 +176,7 @@ export class EditorManager extends EventEmitter<EditorEvents> {
     }
     
     const newValue = editor.getValue();
+    console.log('[EditorManager] editor.getValue() returned:', newValue);
     
     // 销毁编辑器
     editor.destroy();
@@ -193,7 +206,15 @@ export class EditorManager extends EventEmitter<EditorEvents> {
       return;
     }
     
-    const { row, col, editor, container, originalValue } = this.activeEditor;
+    const { row, col, editor, container, originalValue, completeHandler } = this.activeEditor;
+    
+    // 先移除事件监听器，避免在销毁过程中触发事件
+    if (completeHandler) {
+      const editorElement = (editor as any).trigger || (editor as any).input || (editor as any).textarea;
+      if (editorElement) {
+        editorElement.removeEventListener('editor:complete', completeHandler);
+      }
+    }
     
     // 销毁编辑器
     editor.destroy();
@@ -270,26 +291,44 @@ export class EditorManager extends EventEmitter<EditorEvents> {
   ): void {
     // 获取编辑器内部的 input 或 textarea 元素
     const inputElement = (editor as any).input || (editor as any).textarea;
-    if (!inputElement) return;
+    if (inputElement) {
+      const handleInput = () => {
+        const newValue = editor.getValue();
+        this.emit('input', {
+          row,
+          col,
+          oldValue: this.activeEditor?.originalValue,
+          newValue,
+          rowData,
+          column,
+        });
+      };
 
-    const handleInput = () => {
-      const newValue = editor.getValue();
-      this.emit('input', {
-        row,
-        col,
-        oldValue: this.activeEditor?.originalValue,
-        newValue,
-        rowData,
-        column,
-      });
-    };
-
-    inputElement.addEventListener('input', handleInput);
+      inputElement.addEventListener('input', handleInput);
+    }
     
     // 监听编辑器完成事件（用于 SelectEditor 等自定义编辑器）
-    inputElement.addEventListener('editor:complete', () => {
-      this.endEdit();
-    });
+    // SelectEditor 使用 trigger 元素，其他编辑器可能使用不同的元素
+    const editorElement = (editor as any).trigger || inputElement;
+    if (editorElement && this.activeEditor) {
+      // 创建完成处理函数并保存引用，以便后续移除
+      const completeHandler = () => {
+        // 检查是否仍在编辑状态，避免重复调用
+        if (this.activeEditor && this.activeEditor.row === row && this.activeEditor.col === col) {
+          this.endEdit();
+        }
+      };
+      
+      // 保存处理函数引用到 activeEditor
+      this.activeEditor.completeHandler = completeHandler;
+      
+      // 对于 SelectEditor，直接设置 onComplete 回调
+      if ((editor as any).onComplete !== undefined) {
+        (editor as any).onComplete = completeHandler;
+      }
+      
+      editorElement.addEventListener('editor:complete', completeHandler);
+    }
   }
 
   /**

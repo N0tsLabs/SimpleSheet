@@ -30,6 +30,10 @@ export class SelectEditor extends BaseEditor {
   private closeHandler: ((e: Event) => void) | null = null;
   private keyHandler: ((e: KeyboardEvent) => void) | null = null;
   private highlightedIndex = -1;
+  private isCompleting = false; // 防止重复完成
+  
+  /** 完成编辑的回调函数 */
+  public onComplete: (() => void) | null = null;
 
   protected createElement(): HTMLElement {
     const wrapper = this.createWrapper('ss-editor ss-select-editor-custom');
@@ -183,6 +187,9 @@ export class SelectEditor extends BaseEditor {
       document.removeEventListener('keydown', this.keyHandler);
       this.keyHandler = null;
     }
+    
+    // 注意：不在此处重置 isCompleting，而是在 destroy 中重置
+    // 这样可以防止在 selectOption 中调用 closeDropdown 后，isCompleting 被意外重置
   }
 
   private createOptionItem(opt: SelectOption, index: number): HTMLElement {
@@ -235,17 +242,20 @@ export class SelectEditor extends BaseEditor {
   }
 
   private selectOption(opt: SelectOption): void {
+    // 防止重复完成
+    if (this.isCompleting) return;
+    this.isCompleting = true;
+    
+    console.log('[SelectEditor] selectOption called, opt:', opt, 'opt.value:', opt?.value);
     this.selectedValue = opt.value;
+    console.log('[SelectEditor] selectedValue set to:', this.selectedValue);
     this.updateTriggerDisplay();
     this.closeDropdown();
-    // 触发自定义事件通知编辑完成
-    // 使用 setTimeout 确保在事件循环的下一个周期执行，避免与当前事件冲突
-    setTimeout(() => {
-      this.trigger?.dispatchEvent(new CustomEvent('editor:complete', {
-        detail: { value: opt.value },
-        bubbles: true
-      }));
-    }, 0);
+    // 调用回调函数通知编辑完成
+    if (this.onComplete) {
+      console.log('[SelectEditor] calling onComplete callback');
+      this.onComplete();
+    }
   }
 
   private updateTriggerDisplay(): void {
@@ -303,6 +313,7 @@ export class SelectEditor extends BaseEditor {
   }
 
   getValue(): any {
+    console.log('[SelectEditor] getValue called, selectedValue:', this.selectedValue);
     return this.selectedValue;
   }
 
@@ -315,6 +326,8 @@ export class SelectEditor extends BaseEditor {
   destroy(): void {
     this.closeDropdown();
     this.trigger = null;
+    // 重置完成标志，允许下次编辑
+    this.isCompleting = false;
     super.destroy();
   }
 }

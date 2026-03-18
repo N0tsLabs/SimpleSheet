@@ -256,7 +256,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                     this.renderer.updateColumnWidth(index, width);
                 }
             },
-            minWidth: 50,
+            minWidth: 80,
             maxWidth: 500,
             enabled: this.options.features?.columnResize !== false
         });
@@ -601,6 +601,12 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         }
 
         // 处理列宽调整事件
+        this.columnResizer.on('resize:start', () => {
+            // 清除选中状态，避免拖动时选中高亮还在原地
+            this.selectionManager.clearSelection();
+            this.renderer.render();
+        });
+
         this.columnResizer.on('resize:end', ({ columnIndex, oldWidth, newWidth }) => {
             this.emit('column:resize' as any, {
                 index: columnIndex,
@@ -904,6 +910,13 @@ export class Sheet extends EventEmitter<SheetEventMap> {
 
         // 编辑器事件
         this.editorManager.on("end", (event) => {
+            // 保存编辑后的值到数据模型
+            if (event.newValue !== undefined) {
+                this.dataModel.setCellValue(event.row, event.col, event.newValue);
+                this.renderer.refreshCell(event.row, event.col);
+            }
+            // 恢复键盘导航
+            this.keyboardManager.setEnabled(true);
             this.emit("edit:end", event);
         });
 
@@ -1086,6 +1099,12 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             }
         }
 
+        // 检查是否点击了列宽调整器
+        if (target.closest(".ss-column-resizer")) {
+            // 点击了列宽调整器，不选中整列，让 ColumnResizer 处理
+            return;
+        }
+
         // 检查是否点击了列标单元格（选中整列或排序）
         const headerCell = target.closest(".ss-header-cell:not(.ss-corner-cell)");
         if (headerCell) {
@@ -1231,7 +1250,11 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         const cellValue = this.dataModel.getCellValue(cell.row, cell.col);
         const rowData = this.dataModel.getRowData(cell.row) || {};
 
-        if (column && cellValue) {
+        // 对于 select 类型，即使没有值也要显示悬浮窗（显示下拉选项）
+        // 对于其他类型，只有有值时才显示悬浮窗
+        const shouldShowPopover = column && (cellValue || column.type === 'select');
+        
+        if (shouldShowPopover) {
             // 获取单元格 DOM 元素用于定位悬浮窗
             const cellEl = this.renderer.getCellElement(cell.row, cell.col);
 
@@ -1532,8 +1555,9 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         const cellValue = this.dataModel.getCellValue(row, col);
         const rowData = this.dataModel.getRowData(row) || {};
         
-        // 对于文件类型，即使没有值也要显示悬浮窗（显示空列表和添加按钮）
-        if (!cellValue && column.type !== 'file') return;
+        // 对于文件类型和 select 类型，即使没有值也要显示悬浮窗
+        // 文件类型显示空列表和添加按钮，select 类型显示下拉选项
+        if (!cellValue && column.type !== 'file' && column.type !== 'select') return;
         const cellEl = this.renderer.getCellElement(row, col);
         if (!cellEl) return;
 

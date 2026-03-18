@@ -37,7 +37,7 @@ export class ColumnResizer extends EventEmitter<ColumnResizerEvents> {
   constructor(options: ColumnResizerOptions) {
     super();
     this.options = {
-      minWidth: options.minWidth ?? 50,
+      minWidth: options.minWidth ?? 80,
       maxWidth: options.maxWidth ?? 500,
       getColumnWidth: options.getColumnWidth,
       setColumnWidth: options.setColumnWidth,
@@ -136,11 +136,13 @@ export class ColumnResizer extends EventEmitter<ColumnResizerEvents> {
     // 更新列宽
     this.options.setColumnWidth(this.resizingColumnIndex, newWidth);
 
-    // 更新指示线位置
+    // 更新指示线位置 - 使用限制后的宽度计算位置，而不是直接使用鼠标位置
     if (this.indicator && this.container) {
       const containerRect = this.container.getBoundingClientRect();
+      // 计算限制后的指示线位置
+      const limitedX = this.startX + (newWidth - this.startWidth);
       setStyles(this.indicator, {
-        left: `${e.clientX - containerRect.left}px`,
+        left: `${limitedX - containerRect.left}px`,
       });
     }
 
