@@ -152,8 +152,9 @@ export class Renderer {
     // 当点击滚动条轨道或滑块时，不应该触发单元格的选中
     this.scrollContainer.addEventListener('mousedown', (e) => {
       // 检查点击目标是否是交互元素（单元格、表头、行号）
+      // 支持普通单元格(.ss-cell)和冻结单元格([data-row][data-col])
       const target = e.target as HTMLElement;
-      const isInteractive = target.closest('.ss-cell') ||
+      const isInteractive = target.closest('.ss-cell, [data-row][data-col]') ||
                            target.closest('.ss-header-cell') ||
                            target.closest('.ss-row-number') ||
                            target.closest('.ss-column-resizer');
@@ -478,7 +479,7 @@ export class Renderer {
 
     // 行号占位单元格
     if (this.options.showRowNumber) {
-      const cornerCell = createElement('div', 'ss-frozen-header-cell ss-corner-cell');
+      const cornerCell = createElement('div', 'ss-header-cell ss-frozen-header-cell ss-corner-cell');
       setStyles(cornerCell, {
         width: `${rowNumberWidth}px`,
         height: `${headerHeight}px`,
@@ -492,8 +493,9 @@ export class Renderer {
       if (this.isColumnHiddenFn && this.isColumnHiddenFn(col)) continue;
       
       const column = this.options.columns[col];
-      const headerCell = createElement('div', 'ss-frozen-header-cell');
+      const headerCell = createElement('div', 'ss-header-cell ss-frozen-header-cell');
       headerCell.textContent = column?.title || '';
+      headerCell.dataset.col = String(col);
       setStyles(headerCell, {
         width: `${column?.width ?? 100}px`,
         height: `${headerHeight}px`,
@@ -517,8 +519,9 @@ export class Renderer {
 
       // 行号单元格
       if (this.options.showRowNumber) {
-        const rowNumberCell = createElement('div', 'ss-frozen-row-number');
+        const rowNumberCell = createElement('div', 'ss-row-number ss-frozen-row-number');
         rowNumberCell.textContent = String(row + 1);
+        rowNumberCell.dataset.row = String(row);
         setStyles(rowNumberCell, {
           width: `${rowNumberWidth}px`,
           height: `${rowHeight}px`,
@@ -533,13 +536,19 @@ export class Renderer {
         if (this.isColumnHiddenFn && this.isColumnHiddenFn(col)) continue;
 
         const cell = createElement('div', 'ss-frozen-cell');
+        cell.dataset.row = String(row);
+        cell.dataset.col = String(col);
         const column = this.options.columns[col];
         const value = this.getDataFn!(row, col);
-        
+
+        // 添加到缓存以便选中样式更新（使用不同的 key 格式）
+        const cellKey = `frozen:${row}:${col}`;
+        this.cellCache.set(cellKey, cell);
+
         // 使用对应的渲染器渲染单元格内容
         const renderer = this.getRenderer(column);
         renderer.render(cell, value, rowData, column);
-        
+
         setStyles(cell, {
           width: `${column?.width ?? 100}px`,
           height: `${rowHeight}px`,
@@ -587,7 +596,7 @@ export class Renderer {
 
     // 行号占位单元格（表头）- 始终显示，如果启用了行号
     if (this.options.showRowNumber) {
-      const cornerCell = createElement('div', 'ss-frozen-rows-header-cell ss-corner-cell');
+      const cornerCell = createElement('div', 'ss-header-cell ss-frozen-rows-header-cell ss-corner-cell');
       setStyles(cornerCell, {
         width: `${this.options.rowNumberWidth}px`,
         height: `${headerHeight}px`,
@@ -601,8 +610,9 @@ export class Renderer {
       if (this.isColumnHiddenFn && this.isColumnHiddenFn(col)) continue;
       
       const column = this.options.columns[col];
-      const headerCell = createElement('div', 'ss-frozen-rows-header-cell');
+      const headerCell = createElement('div', 'ss-header-cell ss-frozen-rows-header-cell');
       headerCell.textContent = column?.title || '';
+      headerCell.dataset.col = String(col);
       setStyles(headerCell, {
         width: `${column?.width ?? 100}px`,
         height: `${headerHeight}px`,
@@ -624,8 +634,9 @@ export class Renderer {
 
       // 行号单元格 - 始终显示，如果启用了行号
       if (this.options.showRowNumber) {
-        const rowNumberCell = createElement('div', 'ss-frozen-rows-row-number');
+        const rowNumberCell = createElement('div', 'ss-row-number ss-frozen-rows-row-number');
         rowNumberCell.textContent = String(row + 1);
+        rowNumberCell.dataset.row = String(row);
         setStyles(rowNumberCell, {
           width: `${this.options.rowNumberWidth}px`,
           height: `${rowHeight}px`,
@@ -640,12 +651,18 @@ export class Renderer {
         if (this.isColumnHiddenFn && this.isColumnHiddenFn(col)) continue;
 
         const cell = createElement('div', 'ss-frozen-rows-cell');
+        cell.dataset.row = String(row);
+        cell.dataset.col = String(col);
         const column = this.options.columns[col];
         const value = this.getDataFn!(row, col);
-        
+
+        // 添加到缓存以便选中样式更新（使用不同的 key 格式）
+        const cellKey = `frozen-rows:${row}:${col}`;
+        this.cellCache.set(cellKey, cell);
+
         const renderer = this.getRenderer(column);
         renderer.render(cell, value, rowData, column);
-        
+
         setStyles(cell, {
           width: `${column?.width ?? 100}px`,
           height: `${rowHeight}px`,
@@ -689,7 +706,7 @@ export class Renderer {
 
     // 行号占位单元格（表头）
     if (this.options.showRowNumber) {
-      const cornerCell = createElement('div', 'ss-frozen-cols-header-cell ss-corner-cell');
+      const cornerCell = createElement('div', 'ss-header-cell ss-frozen-cols-header-cell ss-corner-cell');
       setStyles(cornerCell, {
         width: `${rowNumberWidth}px`,
         height: `${headerHeight}px`,
@@ -703,8 +720,9 @@ export class Renderer {
       if (this.isColumnHiddenFn && this.isColumnHiddenFn(col)) continue;
       
       const column = this.options.columns[col];
-      const headerCell = createElement('div', 'ss-frozen-cols-header-cell');
+      const headerCell = createElement('div', 'ss-header-cell ss-frozen-cols-header-cell');
       headerCell.textContent = column?.title || '';
+      headerCell.dataset.col = String(col);
       setStyles(headerCell, {
         width: `${column?.width ?? 100}px`,
         height: `${headerHeight}px`,
@@ -736,8 +754,9 @@ export class Renderer {
 
       // 行号单元格
       if (this.options.showRowNumber) {
-        const rowNumberCell = createElement('div', 'ss-frozen-cols-row-number');
+        const rowNumberCell = createElement('div', 'ss-row-number ss-frozen-cols-row-number');
         rowNumberCell.textContent = String(row + 1);
+        rowNumberCell.dataset.row = String(row);
         setStyles(rowNumberCell, {
           width: `${rowNumberWidth}px`,
           height: `${rowHeight}px`,
@@ -752,12 +771,18 @@ export class Renderer {
         if (this.isColumnHiddenFn && this.isColumnHiddenFn(col)) continue;
 
         const cell = createElement('div', 'ss-frozen-cols-cell');
+        cell.dataset.row = String(row);
+        cell.dataset.col = String(col);
         const column = this.options.columns[col];
         const value = this.getDataFn!(row, col);
-        
+
+        // 添加到缓存以便选中样式更新（使用不同的 key 格式）
+        const cellKey = `frozen-cols:${row}:${col}`;
+        this.cellCache.set(cellKey, cell);
+
         const renderer = this.getRenderer(column);
         renderer.render(cell, value, rowData, column);
-        
+
         setStyles(cell, {
           width: `${column?.width ?? 100}px`,
           height: `${rowHeight}px`,
@@ -1961,41 +1986,53 @@ export class Renderer {
       newSelectedSet.add(`${cell.row}:${cell.col}`);
     }
 
-    // 移除不再选中的单元格的选中样式
+    // 移除不再选中的单元格的选中样式（包括冻结单元格）
     for (const cellKey of this.selectedCells) {
       if (!newSelectedSet.has(cellKey)) {
         const [row, col] = cellKey.split(':').map(Number);
+        // 更新主区域单元格
         const cell = this.cellCache.get(cellKey);
         if (cell) {
           cell.classList.remove('ss-cell-selected', 'ss-cell-active');
         }
+        // 更新冻结区域单元格（通过 DOM 查询）
+        this.updateFrozenCellSelection(row, col, false, false);
       }
     }
 
-    // 添加新选中单元格的选中样式
+    // 添加新选中单元格的选中样式（包括冻结单元格）
     for (const cellKey of newSelectedSet) {
+      const [row, col] = cellKey.split(':').map(Number);
       if (!this.selectedCells.has(cellKey)) {
-        const [row, col] = cellKey.split(':').map(Number);
+        // 更新主区域单元格
         const cell = this.cellCache.get(cellKey);
         if (cell) {
           cell.classList.add('ss-cell-selected');
         }
       }
+      // 始终更新冻结区域单元格（通过 DOM 查询）
+      const isActive = activeCell?.row === row && activeCell?.col === col;
+      this.updateFrozenCellSelection(row, col, true, isActive);
     }
 
     // 更新活动单元格样式
-    // 先清除所有活动单元格样式
+    // 先清除所有活动单元格样式（主区域）
     for (const cell of this.cellCache.values()) {
       cell.classList.remove('ss-cell-active');
     }
+    // 清除冻结区域活动单元格样式
+    this.clearFrozenCellsActiveState();
 
     // 设置新的活动单元格样式
     if (activeCell) {
       const activeCellKey = `${activeCell.row}:${activeCell.col}`;
+      // 更新主区域活动单元格
       const activeCellEl = this.cellCache.get(activeCellKey);
       if (activeCellEl) {
         activeCellEl.classList.add('ss-cell-active');
       }
+      // 更新冻结区域活动单元格
+      this.updateFrozenCellSelection(activeCell.row, activeCell.col, true, true);
     }
 
     // 更新内部状态
@@ -2008,10 +2045,48 @@ export class Renderer {
   }
 
   /**
+   * 更新冻结单元格的选中样式
+   */
+  private updateFrozenCellSelection(row: number, col: number, selected: boolean, active: boolean): void {
+    // 查询所有冻结区域中的单元格（包括角落、冻结行、冻结列）
+    const frozenCells = this.container?.querySelectorAll(
+      `.ss-frozen-cell[data-row="${row}"][data-col="${col}"], ` +
+      `.ss-frozen-rows-cell[data-row="${row}"][data-col="${col}"], ` +
+      `.ss-frozen-cols-cell[data-row="${row}"][data-col="${col}"]`
+    ) as NodeListOf<HTMLElement>;
+
+    frozenCells?.forEach(cell => {
+      if (selected) {
+        cell.classList.add('ss-cell-selected');
+      } else {
+        cell.classList.remove('ss-cell-selected');
+      }
+      if (active) {
+        cell.classList.add('ss-cell-active');
+      } else {
+        cell.classList.remove('ss-cell-active');
+      }
+    });
+  }
+
+  /**
+   * 清除所有冻结单元格的活动状态
+   */
+  private clearFrozenCellsActiveState(): void {
+    const frozenActiveCells = this.container?.querySelectorAll(
+      '.ss-frozen-cell.ss-cell-active, .ss-frozen-rows-cell.ss-cell-active, .ss-frozen-cols-cell.ss-cell-active'
+    ) as NodeListOf<HTMLElement>;
+
+    frozenActiveCells?.forEach(cell => {
+      cell.classList.remove('ss-cell-active');
+    });
+  }
+
+  /**
    * 清除指定列的选择高亮
    */
   clearColumnSelection(colIndex: number): void {
-    // 清除该列所有单元格的选中样式
+    // 清除该列所有单元格的选中样式（主区域）
     for (const [cellKey, cell] of this.cellCache.entries()) {
       const col = parseInt(cellKey.split(':')[1], 10);
       if (col === colIndex) {
@@ -2019,7 +2094,17 @@ export class Renderer {
         this.selectedCells.delete(cellKey);
       }
     }
-    
+
+    // 清除该列冻结单元格的选中样式
+    const frozenCells = this.container?.querySelectorAll(
+      `.ss-frozen-cell[data-col="${colIndex}"], ` +
+      `.ss-frozen-rows-cell[data-col="${colIndex}"], ` +
+      `.ss-frozen-cols-cell[data-col="${colIndex}"]`
+    ) as NodeListOf<HTMLElement>;
+    frozenCells?.forEach(cell => {
+      cell.classList.remove('ss-cell-selected', 'ss-cell-active');
+    });
+
     // 如果活动单元格是该列，清除活动状态
     if (this.activeCell?.col === colIndex) {
       this.activeCell = null;
@@ -2087,6 +2172,31 @@ export class Renderer {
       maxRow = Math.max(maxRow, cell.row);
       minCol = Math.min(minCol, cell.col);
       maxCol = Math.max(maxCol, cell.col);
+    }
+
+    // 检查是否是冻结单元格（活动单元格在冻结区域内）
+    const isFrozenCell = activeCell && (
+      activeCell.row < this.frozenConfig.rows ||
+      activeCell.col < this.frozenConfig.cols
+    );
+
+    // 如果是单个冻结单元格被选中，直接使用 getCellRect 获取位置
+    if (isFrozenCell && selectedCells.length === 1 && activeCell) {
+      const cellRect = this.getCellRect(activeCell.row, activeCell.col);
+      if (cellRect && this.root) {
+        const rootRect = this.root.getBoundingClientRect();
+        const top = cellRect.top - rootRect.top;
+        const left = cellRect.left - rootRect.left;
+
+        setStyles(this.selectionBox, {
+          top: `${top}px`,
+          left: `${left}px`,
+          width: `${cellRect.width}px`,
+          height: `${cellRect.height}px`,
+          display: '',
+        });
+        return;
+      }
     }
 
     // 使用计算值获取水平位置（使用实际列宽）
@@ -2334,19 +2444,31 @@ export class Renderer {
    */
   getCellRect(row: number, col: number): DOMRect | null {
     if (!this.scrollContainer || !this.root) return null;
-    
+
+    // 首先尝试查找冻结单元格（因为它们在 DOM 中是独立存在的）
+    const frozenCell = this.container?.querySelector(
+      `.ss-frozen-cell[data-row="${row}"][data-col="${col}"], ` +
+      `.ss-frozen-cols-cell[data-row="${row}"][data-col="${col}"], ` +
+      `.ss-frozen-rows-cell[data-row="${row}"][data-col="${col}"]`
+    ) as HTMLElement;
+
+    if (frozenCell) {
+      // 对于冻结单元格，直接返回其 DOMRect
+      return frozenCell.getBoundingClientRect();
+    }
+
     const scrollTop = this.scrollContainer.scrollTop;
     const scrollLeft = this.scrollContainer.scrollLeft;
-    
+
     const rootRect = this.root.getBoundingClientRect();
-    
+
     // 使用实际行高计算位置
     const top = this.getRowOffset(row) + this.options.headerHeight - scrollTop;
     // 使用 getColumnOffsetDirect 确保与单元格和选区框计算一致
     const left = this.getColumnOffsetDirect(col) - scrollLeft;
     const width = this.options.columns[col]?.width ?? 100;
     const height = this.getRowHeight(row);
-    
+
     return new DOMRect(
       rootRect.left + left,
       rootRect.top + top,

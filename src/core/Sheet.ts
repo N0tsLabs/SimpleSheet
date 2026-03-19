@@ -1104,7 +1104,7 @@ export class Sheet extends EventEmitter<SheetEventMap> {
 
         // 如果点击的不是文件预览浮层，关闭文件预览
         if (this.currentFilePreviewCell) {
-            const clickedCell = target.closest(".ss-cell");
+            const clickedCell = target.closest('.ss-cell, [data-row][data-col]') as HTMLElement;
             // 如果点击的不是对应的单元格，关闭预览
             if (!clickedCell || clickedCell !== this.currentFilePreviewCell) {
                 this.closeFilePreview();
@@ -1212,7 +1212,8 @@ export class Sheet extends EventEmitter<SheetEventMap> {
 
         // 直接从点击目标获取单元格位置，不再使用 getBoundingClientRect 计算坐标
         // 这样可以避免触发同步布局重计算，防止浏览器自动滚动
-        const cellElement = target.closest('.ss-cell') as HTMLElement;
+        // 支持普通单元格(.ss-cell)和冻结单元格([data-row][data-col])
+        const cellElement = target.closest('.ss-cell, [data-row][data-col]') as HTMLElement;
         let cell: { row: number; col: number } | null = null;
 
         if (cellElement) {
