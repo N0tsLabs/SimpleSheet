@@ -45,7 +45,12 @@ export type {
   ConfigChangeType,
   SheetConfigSnapshot,
   SheetConfigChangeEvent,
+  // 冻结相关类型
+  FreezeChangeEvent,
 } from './types';
+
+// 导出 useTableScroll 钩子
+export { useTableScroll } from './render/useTableScroll';
 
 // 导出右键菜单插件
 export {

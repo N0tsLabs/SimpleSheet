@@ -49,6 +49,17 @@ export class Renderer {
   private virtualScroll: VirtualScroll;
   private options: RendererOptions;
   
+  /** 冻结层元素 */
+  private frozenCorner: HTMLElement | null = null;  // 左上角：行号+表头+冻结行列
+  private frozenRows: HTMLElement | null = null;     // 顶部：冻结行数据
+  private frozenCols: HTMLElement | null = null;     // 左侧：冻结列数据
+  
+  /** 冻结配置 */
+  private frozenConfig: { rows: number; cols: number } = { rows: 0, cols: 0 };
+  
+  /** 表头冻结状态（独立于数据行冻结） */
+  private freezeHeader: boolean = false;
+  
   /** 单元格 DOM 缓存 */
   private cellCache: Map<string, HTMLElement> = new Map();
   
@@ -117,6 +128,7 @@ export class Renderer {
 
   /**
    * 初始化 DOM 结构
+   * 默认表头在滚动容器内，只有冻结表头时才移出
    */
   private init(): void {
     // 清空容器
@@ -171,12 +183,21 @@ export class Renderer {
     // 创建编辑器层
     this.editorLayer = createElement('div', 'ss-editor-layer');
 
+    // 创建冻结层
+    this.createFrozenLayer();
+
     // 组装 DOM
+    // 默认表头在滚动容器内，这样它会随横向滚动而滚动
+    // 只有当冻结表头时，才将表头移到滚动容器外
     this.scrollContainer.appendChild(this.header);
     this.scrollContainer.appendChild(this.body);
     this.root.appendChild(this.scrollContainer);
     this.root.appendChild(this.selectionLayer);
     this.root.appendChild(this.editorLayer);
+    
+    // 挂载冻结层
+    this.mountFrozenLayer();
+    
     this.container.appendChild(this.root);
     
     // 设置样式
@@ -189,8 +210,566 @@ export class Renderer {
     this.virtualScroll.on('change', this.handleVirtualScrollChange.bind(this));
     this.virtualScroll.on('scroll', this.handleScroll.bind(this));
     
+    // 监听滚动事件以同步冻结层
+    this.scrollContainer.addEventListener('scroll', this.handleFrozenScroll.bind(this), { passive: true });
+    
     // 渲染表头
     this.renderHeader();
+  }
+
+  /**
+   * 创建冻结层
+   */
+  private createFrozenLayer(): void {
+    // 创建左上角角落（行号+表头+冻结行列交叉）
+    this.frozenCorner = createElement('div', 'ss-frozen-corner');
+    setStyles(this.frozenCorner, {
+      position: 'absolute',
+      top: '0',
+      left: '0',
+      display: 'none',
+      zIndex: '53',
+      // 移除 pointerEvents: 'none'，让冻结区域可以正常接收鼠标事件
+    });
+
+    // 创建顶部冻结行区域
+    this.frozenRows = createElement('div', 'ss-frozen-rows');
+    setStyles(this.frozenRows, {
+      position: 'absolute',
+      top: '0',
+      left: '0',
+      display: 'none',
+      zIndex: '52',
+      // 移除 pointerEvents: 'none'，让冻结区域可以正常接收鼠标事件
+    });
+
+    // 创建左侧冻结列区域
+    this.frozenCols = createElement('div', 'ss-frozen-cols');
+    setStyles(this.frozenCols, {
+      position: 'absolute',
+      top: '0',
+      left: '0',
+      display: 'none',
+      zIndex: '51',
+      // 移除 pointerEvents: 'none'，让冻结区域可以正常接收鼠标事件
+    });
+  }
+
+  /**
+   * 挂载冻结层到根元素
+   */
+  private mountFrozenLayer(): void {
+    if (!this.root) return;
+    
+    // 直接将冻结区域添加到 root，不使用容器包裹
+    // 这样可以避免容器覆盖主内容区域
+    if (this.frozenCols && !this.frozenCols.parentNode) {
+      this.root.appendChild(this.frozenCols);
+    }
+    if (this.frozenRows && !this.frozenRows.parentNode) {
+      this.root.appendChild(this.frozenRows);
+    }
+    if (this.frozenCorner && !this.frozenCorner.parentNode) {
+      this.root.appendChild(this.frozenCorner);
+    }
+  }
+
+  /**
+   * 处理冻结层滚动同步
+   * 表头使用 position: sticky，不需要 JavaScript 同步
+   */
+  private handleFrozenScroll(): void {
+    if (!this.scrollContainer) return;
+    
+    const { scrollTop } = this.scrollContainer;
+    const { cols } = this.frozenConfig;
+
+    // 列冻结区：固定在左侧，内容容器跟随纵向滚动
+    // 当主区域纵向滚动时，冻结列区域的内容需要向上移动，显示对应行
+    if (cols > 0 && this.frozenCols) {
+      const contentContainer = this.frozenCols.querySelector('.ss-frozen-cols-content') as HTMLElement;
+      if (contentContainer) {
+        contentContainer.style.transform = `translate3d(0, ${-scrollTop}px, 0)`;
+      }
+    }
+  }
+
+  /**
+   * 设置冻结配置
+   * freezeHeader: 是否冻结表头
+   * cols: 冻结列数
+   */
+  setFrozenConfig(freezeHeader: boolean, cols: number): void {
+    this.freezeHeader = freezeHeader;
+    this.frozenConfig = { rows: 0, cols };
+    
+    // 更新虚拟滚动的冻结配置
+    this.virtualScroll.update({
+      frozenRows: 0,
+      frozenCols: cols,
+    });
+    
+    // 处理表头冻结：将表头移出/移入滚动容器
+    this.updateHeaderFreezeState(freezeHeader);
+    
+    // 更新冻结层显示
+    this.updateFrozenLayer();
+    
+    // 重新渲染
+    this.render();
+  }
+
+  /**
+   * 更新表头冻结状态
+   * 使用 position: sticky 实现流畅的表头冻结
+   * 避免 JavaScript 同步带来的延迟
+   */
+  private updateHeaderFreezeState(isFrozen: boolean): void {
+    if (!this.header || !this.root || !this.scrollContainer) return;
+    
+    if (isFrozen) {
+      // 冻结表头：使用 sticky 定位
+      if (this.header.parentNode !== this.scrollContainer) {
+        // 如果表头在 root 中，先移回 scrollContainer
+        if (this.header.parentNode === this.root) {
+          this.root.removeChild(this.header);
+          this.scrollContainer.insertBefore(this.header, this.scrollContainer.firstChild);
+        }
+      }
+      
+      // 设置 sticky 样式
+      setStyles(this.header, {
+        position: 'sticky',
+        top: '0',
+        zIndex: '50',
+      });
+    } else {
+      // 取消冻结：恢复普通定位
+      if (this.header.parentNode !== this.scrollContainer) {
+        if (this.header.parentNode === this.root) {
+          this.root.removeChild(this.header);
+          this.scrollContainer.insertBefore(this.header, this.scrollContainer.firstChild);
+        }
+      }
+      
+      // 重置表头样式
+      setStyles(this.header, {
+        position: '',
+        top: '',
+        zIndex: '',
+      });
+    }
+  }
+
+  /**
+   * 获取冻结配置
+   */
+  getFrozenConfig(): { rows: number; cols: number } {
+    return { ...this.frozenConfig };
+  }
+
+  /**
+   * 获取表头冻结状态
+   */
+  getFreezeHeader(): boolean {
+    return this.freezeHeader;
+  }
+
+  /**
+   * 更新冻结层
+   */
+  private updateFrozenLayer(): void {
+    if (!this.frozenCorner || !this.frozenRows || !this.frozenCols) return;
+
+    const { rows, cols } = this.frozenConfig;
+    const frozenRowsHeight = this.virtualScroll.getFrozenRowsHeight();
+    const frozenColsWidth = this.virtualScroll.getFrozenColsWidth();
+
+    // 更新角落区域
+    if (rows > 0 && cols > 0) {
+      this.frozenCorner.style.display = 'block';
+      setStyles(this.frozenCorner, {
+        width: `${frozenColsWidth}px`,
+        height: `${frozenRowsHeight}px`,
+      });
+    } else {
+      this.frozenCorner.style.display = 'none';
+    }
+
+    // 更新行冻结区
+    // 冻结行覆盖整个宽度，通过 transform 进行横向滚动同步
+    if (rows > 0) {
+      this.frozenRows.style.display = 'block';
+      setStyles(this.frozenRows, {
+        width: '100%',
+        height: `${frozenRowsHeight}px`,
+        left: '0',
+        top: '0',
+      });
+    } else {
+      this.frozenRows.style.display = 'none';
+    }
+
+    // 更新列冻结区
+    // 冻结列覆盖整个高度，通过 transform 进行纵向滚动同步
+    if (cols > 0) {
+      this.frozenCols.style.display = 'block';
+      setStyles(this.frozenCols, {
+        width: `${frozenColsWidth}px`,
+        height: '100%',
+        left: '0',
+        top: '0',
+      });
+    } else {
+      this.frozenCols.style.display = 'none';
+    }
+
+    // 渲染冻结内容
+    this.renderFrozenContent();
+  }
+
+  /**
+   * 渲染冻结区域内容
+   */
+  private renderFrozenContent(): void {
+    if (!this.getDataFn || !this.getRowDataFn) return;
+
+    const { rows, cols } = this.frozenConfig;
+
+    // 渲染角落区域（行号+表头+冻结行列交叉）
+    if (rows > 0 && cols > 0 && this.frozenCorner) {
+      this.renderFrozenCorner();
+    }
+
+    // 渲染冻结行
+    if (rows > 0 && this.frozenRows) {
+      this.renderFrozenRows();
+    }
+
+    // 渲染冻结列
+    if (cols > 0 && this.frozenCols) {
+      this.renderFrozenCols();
+    }
+  }
+
+  /**
+   * 渲染角落区域
+   */
+  private renderFrozenCorner(): void {
+    if (!this.frozenCorner) return;
+    
+    // 清空现有内容
+    this.frozenCorner.innerHTML = '';
+    
+    const { rows, cols } = this.frozenConfig;
+    const headerHeight = this.options.headerHeight;
+    const rowHeight = this.options.rowHeight;
+    const rowNumberWidth = this.options.rowNumberWidth;
+
+    // 创建表头行（包含行号占位和冻结列表头）
+    const headerRow = createElement('div', 'ss-frozen-header-row');
+    setStyles(headerRow, {
+      display: 'flex',
+      height: `${headerHeight}px`,
+      position: 'absolute',
+      top: '0',
+      left: '0',
+    });
+
+    // 行号占位单元格
+    if (this.options.showRowNumber) {
+      const cornerCell = createElement('div', 'ss-frozen-header-cell ss-corner-cell');
+      setStyles(cornerCell, {
+        width: `${rowNumberWidth}px`,
+        height: `${headerHeight}px`,
+        flexShrink: '0',
+      });
+      headerRow.appendChild(cornerCell);
+    }
+
+    // 冻结列表头
+    for (let col = 0; col < cols; col++) {
+      if (this.isColumnHiddenFn && this.isColumnHiddenFn(col)) continue;
+      
+      const column = this.options.columns[col];
+      const headerCell = createElement('div', 'ss-frozen-header-cell');
+      headerCell.textContent = column?.title || '';
+      setStyles(headerCell, {
+        width: `${column?.width ?? 100}px`,
+        height: `${headerHeight}px`,
+        flexShrink: '0',
+      });
+      headerRow.appendChild(headerCell);
+    }
+
+    this.frozenCorner.appendChild(headerRow);
+
+    // 创建冻结行数据（包含行号和冻结列数据）
+    for (let row = 0; row < rows; row++) {
+      const rowEl = createElement('div', 'ss-frozen-row');
+      setStyles(rowEl, {
+        display: 'flex',
+        height: `${rowHeight}px`,
+        position: 'absolute',
+        top: `${headerHeight + row * rowHeight}px`,
+        left: '0',
+      });
+
+      // 行号单元格
+      if (this.options.showRowNumber) {
+        const rowNumberCell = createElement('div', 'ss-frozen-row-number');
+        rowNumberCell.textContent = String(row + 1);
+        setStyles(rowNumberCell, {
+          width: `${rowNumberWidth}px`,
+          height: `${rowHeight}px`,
+          flexShrink: '0',
+        });
+        rowEl.appendChild(rowNumberCell);
+      }
+
+      // 冻结列数据
+      const rowData = this.getRowDataFn!(row);
+      for (let col = 0; col < cols; col++) {
+        if (this.isColumnHiddenFn && this.isColumnHiddenFn(col)) continue;
+
+        const cell = createElement('div', 'ss-frozen-cell');
+        const column = this.options.columns[col];
+        const value = this.getDataFn!(row, col);
+        
+        // 使用对应的渲染器渲染单元格内容
+        const renderer = this.getRenderer(column);
+        renderer.render(cell, value, rowData, column);
+        
+        setStyles(cell, {
+          width: `${column?.width ?? 100}px`,
+          height: `${rowHeight}px`,
+          flexShrink: '0',
+        });
+        rowEl.appendChild(cell);
+      }
+
+      this.frozenCorner.appendChild(rowEl);
+    }
+  }
+
+  /**
+   * 渲染冻结行
+   * 冻结行区域固定在顶部，包含表头和冻结行数据（跳过冻结列）
+   * 内容需要足够宽以容纳所有列，通过 transform 来显示当前视口区域
+   */
+  private renderFrozenRows(): void {
+    if (!this.frozenRows) return;
+    
+    // 清空现有内容
+    this.frozenRows.innerHTML = '';
+    
+    const { rows, cols } = this.frozenConfig;
+    const headerHeight = this.options.headerHeight;
+    const rowHeight = this.options.rowHeight;
+
+    // 创建内容容器，用于整体移动
+    const contentContainer = createElement('div', 'ss-frozen-rows-content');
+    setStyles(contentContainer, {
+      position: 'absolute',
+      top: '0',
+      left: '0',
+      display: 'flex',
+      flexDirection: 'column',
+    });
+
+    // 创建表头行（从冻结列之后开始渲染，避免重复）
+    const headerRow = createElement('div', 'ss-frozen-rows-header');
+    setStyles(headerRow, {
+      display: 'flex',
+      height: `${headerHeight}px`,
+      flexShrink: '0',
+    });
+
+    // 行号占位单元格（表头）- 始终显示，如果启用了行号
+    if (this.options.showRowNumber) {
+      const cornerCell = createElement('div', 'ss-frozen-rows-header-cell ss-corner-cell');
+      setStyles(cornerCell, {
+        width: `${this.options.rowNumberWidth}px`,
+        height: `${headerHeight}px`,
+        flexShrink: '0',
+      });
+      headerRow.appendChild(cornerCell);
+    }
+
+    // 从冻结列之后开始渲染，避免与角落区域重复
+    for (let col = cols; col < this.options.columns.length; col++) {
+      if (this.isColumnHiddenFn && this.isColumnHiddenFn(col)) continue;
+      
+      const column = this.options.columns[col];
+      const headerCell = createElement('div', 'ss-frozen-rows-header-cell');
+      headerCell.textContent = column?.title || '';
+      setStyles(headerCell, {
+        width: `${column?.width ?? 100}px`,
+        height: `${headerHeight}px`,
+        flexShrink: '0',
+      });
+      headerRow.appendChild(headerCell);
+    }
+
+    contentContainer.appendChild(headerRow);
+
+    // 创建冻结行数据（从冻结列之后开始渲染，避免重复）
+    for (let row = 0; row < rows; row++) {
+      const rowEl = createElement('div', 'ss-frozen-rows-row');
+      setStyles(rowEl, {
+        display: 'flex',
+        height: `${rowHeight}px`,
+        flexShrink: '0',
+      });
+
+      // 行号单元格 - 始终显示，如果启用了行号
+      if (this.options.showRowNumber) {
+        const rowNumberCell = createElement('div', 'ss-frozen-rows-row-number');
+        rowNumberCell.textContent = String(row + 1);
+        setStyles(rowNumberCell, {
+          width: `${this.options.rowNumberWidth}px`,
+          height: `${rowHeight}px`,
+          flexShrink: '0',
+        });
+        rowEl.appendChild(rowNumberCell);
+      }
+
+      const rowData = this.getRowDataFn!(row);
+      // 从冻结列之后开始渲染，避免与角落区域重复
+      for (let col = cols; col < this.options.columns.length; col++) {
+        if (this.isColumnHiddenFn && this.isColumnHiddenFn(col)) continue;
+
+        const cell = createElement('div', 'ss-frozen-rows-cell');
+        const column = this.options.columns[col];
+        const value = this.getDataFn!(row, col);
+        
+        const renderer = this.getRenderer(column);
+        renderer.render(cell, value, rowData, column);
+        
+        setStyles(cell, {
+          width: `${column?.width ?? 100}px`,
+          height: `${rowHeight}px`,
+          flexShrink: '0',
+        });
+        rowEl.appendChild(cell);
+      }
+
+      contentContainer.appendChild(rowEl);
+    }
+
+    this.frozenRows.appendChild(contentContainer);
+  }
+
+  /**
+   * 渲染冻结列
+   * 冻结列区域固定在左侧，包含表头、行号和冻结列数据
+   * 表头固定在顶部，只有数据行跟随纵向滚动
+   */
+  private renderFrozenCols(): void {
+    if (!this.frozenCols) return;
+    
+    // 清空现有内容
+    this.frozenCols.innerHTML = '';
+    
+    const { rows, cols } = this.frozenConfig;
+    const rowHeight = this.options.rowHeight;
+    const rowNumberWidth = this.options.rowNumberWidth;
+    const headerHeight = this.options.headerHeight;
+
+    // 创建表头行（固定在顶部，不随滚动移动）
+    const headerRow = createElement('div', 'ss-frozen-cols-header');
+    setStyles(headerRow, {
+      display: 'flex',
+      height: `${headerHeight}px`,
+      position: 'absolute',
+      top: '0',
+      left: '0',
+      zIndex: '1',
+    });
+
+    // 行号占位单元格（表头）
+    if (this.options.showRowNumber) {
+      const cornerCell = createElement('div', 'ss-frozen-cols-header-cell ss-corner-cell');
+      setStyles(cornerCell, {
+        width: `${rowNumberWidth}px`,
+        height: `${headerHeight}px`,
+        flexShrink: '0',
+      });
+      headerRow.appendChild(cornerCell);
+    }
+
+    // 冻结列表头
+    for (let col = 0; col < cols; col++) {
+      if (this.isColumnHiddenFn && this.isColumnHiddenFn(col)) continue;
+      
+      const column = this.options.columns[col];
+      const headerCell = createElement('div', 'ss-frozen-cols-header-cell');
+      headerCell.textContent = column?.title || '';
+      setStyles(headerCell, {
+        width: `${column?.width ?? 100}px`,
+        height: `${headerHeight}px`,
+        flexShrink: '0',
+      });
+      headerRow.appendChild(headerCell);
+    }
+
+    this.frozenCols.appendChild(headerRow);
+
+    // 创建内容容器，用于数据行（跟随纵向滚动）
+    const contentContainer = createElement('div', 'ss-frozen-cols-content');
+    setStyles(contentContainer, {
+      position: 'absolute',
+      top: `${headerHeight}px`, // 从表头下方开始
+      left: '0',
+      display: 'flex',
+      flexDirection: 'column',
+    });
+
+    // 渲染冻结列数据（从冻结行之后开始，避免与角落区域重复）
+    for (let row = rows; row < this.options.rowCount; row++) {
+      const rowEl = createElement('div', 'ss-frozen-cols-row');
+      setStyles(rowEl, {
+        display: 'flex',
+        height: `${rowHeight}px`,
+        flexShrink: '0',
+      });
+
+      // 行号单元格
+      if (this.options.showRowNumber) {
+        const rowNumberCell = createElement('div', 'ss-frozen-cols-row-number');
+        rowNumberCell.textContent = String(row + 1);
+        setStyles(rowNumberCell, {
+          width: `${rowNumberWidth}px`,
+          height: `${rowHeight}px`,
+          flexShrink: '0',
+        });
+        rowEl.appendChild(rowNumberCell);
+      }
+
+      // 冻结列数据
+      const rowData = this.getRowDataFn!(row);
+      for (let col = 0; col < cols; col++) {
+        if (this.isColumnHiddenFn && this.isColumnHiddenFn(col)) continue;
+
+        const cell = createElement('div', 'ss-frozen-cols-cell');
+        const column = this.options.columns[col];
+        const value = this.getDataFn!(row, col);
+        
+        const renderer = this.getRenderer(column);
+        renderer.render(cell, value, rowData, column);
+        
+        setStyles(cell, {
+          width: `${column?.width ?? 100}px`,
+          height: `${rowHeight}px`,
+          flexShrink: '0',
+        });
+        rowEl.appendChild(cell);
+      }
+
+      contentContainer.appendChild(rowEl);
+    }
+
+    this.frozenCols.appendChild(contentContainer);
   }
 
   /**
@@ -655,6 +1234,13 @@ export class Renderer {
     if (this.header) {
       setStyles(this.header, {
         width: `${totalWidth}px`,
+      });
+    }
+
+    // 滚动容器占满整个高度（表头现在在容器内）
+    if (this.scrollContainer) {
+      setStyles(this.scrollContainer, {
+        height: '100%',
       });
     }
   }
@@ -1589,7 +2175,9 @@ export class Renderer {
    * 处理滚动事件
    */
   private handleScroll(): void {
-    // 表头在滚动容器内部，会自然跟随水平滚动，不需要手动同步
+    if (!this.scrollContainer || !this.header) return;
+
+    // 使用 position: sticky 后，表头会自动跟随滚动，不需要 JavaScript 同步
 
     // 更新选区位置
     if (this.activeCell) {

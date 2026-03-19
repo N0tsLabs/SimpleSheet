@@ -1,0 +1,266 @@
+/**
+ * 冻结区域样式
+ */
+
+/* 冻结区域通用样式 */
+.ss-frozen-corner,
+.ss-frozen-rows,
+.ss-frozen-cols {
+  background-color: var(--ss-bg-color);
+  overflow: hidden;
+}
+
+/* 角落区域 */
+.ss-frozen-corner {
+  border-right: var(--ss-border-width) solid var(--ss-border-color);
+  border-bottom: var(--ss-border-width) solid var(--ss-border-color);
+  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* 冻结行区域 */
+.ss-frozen-rows {
+  border-bottom: var(--ss-border-width) solid var(--ss-border-color);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* 冻结列区域 */
+.ss-frozen-cols {
+  border-right: var(--ss-border-width) solid var(--ss-border-color);
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.1);
+}
+
+/* 冻结表头行 */
+.ss-frozen-header-row {
+  background-color: var(--ss-header-bg);
+  border-bottom: var(--ss-border-width) solid var(--ss-border-color);
+}
+
+/* 冻结表头单元格 */
+.ss-frozen-header-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ss-header-padding);
+  font-weight: 500;
+  color: var(--ss-header-text-color);
+  background-color: var(--ss-header-bg);
+  border-right: var(--ss-border-width) solid var(--ss-border-color);
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ss-frozen-header-cell:last-child {
+  border-right: none;
+}
+
+/* 冻结行 */
+.ss-frozen-row {
+  background-color: var(--ss-row-bg);
+  border-bottom: var(--ss-border-width) solid var(--ss-border-color-light);
+}
+
+.ss-frozen-row:hover {
+  background-color: var(--ss-row-bg-hover);
+}
+
+/* 冻结行号 */
+.ss-frozen-row-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--ss-row-number-bg);
+  color: var(--ss-row-number-text);
+  font-size: var(--ss-font-size-small);
+  border-right: var(--ss-border-width) solid var(--ss-border-color);
+  cursor: pointer;
+}
+
+.ss-frozen-row-number:hover {
+  background-color: var(--ss-header-bg-hover);
+  color: var(--ss-text-color);
+}
+
+/* 冻结单元格 */
+.ss-frozen-cell {
+  display: flex;
+  align-items: center;
+  padding: var(--ss-cell-padding);
+  border-right: var(--ss-border-width) solid var(--ss-border-color);
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background-color: transparent;
+}
+
+.ss-frozen-cell:last-child {
+  border-right: none;
+}
+
+/* 冻结行区域表头 */
+.ss-frozen-rows-header {
+  background-color: var(--ss-header-bg);
+  border-bottom: var(--ss-border-width) solid var(--ss-border-color);
+}
+
+.ss-frozen-rows-header-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ss-header-padding);
+  font-weight: 500;
+  color: var(--ss-header-text-color);
+  background-color: var(--ss-header-bg);
+  border-right: var(--ss-border-width) solid var(--ss-border-color);
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ss-frozen-rows-header-cell:last-child {
+  border-right: none;
+}
+
+/* 冻结行数据行 */
+.ss-frozen-rows-row {
+  background-color: var(--ss-row-bg);
+  border-bottom: var(--ss-border-width) solid var(--ss-border-color-light);
+}
+
+.ss-frozen-rows-row:hover {
+  background-color: var(--ss-row-bg-hover);
+}
+
+/* 冻结行数据单元格 */
+.ss-frozen-rows-cell {
+  display: flex;
+  align-items: center;
+  padding: var(--ss-cell-padding);
+  border-right: var(--ss-border-width) solid var(--ss-border-color);
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background-color: transparent;
+}
+
+.ss-frozen-rows-cell:last-child {
+  border-right: none;
+}
+
+/* 冻结列区域表头 */
+.ss-frozen-cols-header {
+  background-color: var(--ss-header-bg);
+  border-bottom: var(--ss-border-width) solid var(--ss-border-color);
+  /* 表头固定在顶部 */
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+}
+
+/* 冻结列区域表头单元格 */
+.ss-frozen-cols-header-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ss-header-padding);
+  font-weight: 500;
+  color: var(--ss-header-text-color);
+  background-color: var(--ss-header-bg);
+  border-right: var(--ss-border-width) solid var(--ss-border-color);
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ss-frozen-cols-header-cell:last-child {
+  border-right: none;
+}
+
+/* 冻结列区域行 */
+.ss-frozen-cols-row {
+  background-color: var(--ss-row-bg);
+  border-bottom: var(--ss-border-width) solid var(--ss-border-color-light);
+}
+
+.ss-frozen-cols-row:hover {
+  background-color: var(--ss-row-bg-hover);
+}
+
+/* 冻结列区域行号 */
+.ss-frozen-cols-row-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--ss-row-number-bg);
+  color: var(--ss-row-number-text);
+  font-size: var(--ss-font-size-small);
+  border-right: var(--ss-border-width) solid var(--ss-border-color);
+  cursor: pointer;
+}
+
+.ss-frozen-cols-row-number:hover {
+  background-color: var(--ss-header-bg-hover);
+  color: var(--ss-text-color);
+}
+
+/* 冻结列区域单元格 */
+.ss-frozen-cols-cell {
+  display: flex;
+  align-items: center;
+  padding: var(--ss-cell-padding);
+  border-right: var(--ss-border-width) solid var(--ss-border-color);
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background-color: transparent;
+}
+
+.ss-frozen-cols-cell:last-child {
+  border-right: none;
+}
+
+/* 暗色主题适配 */
+[data-theme="dark"] .ss-frozen-corner,
+[data-theme="dark"] .ss-frozen-rows,
+[data-theme="dark"] .ss-frozen-cols {
+  background-color: var(--ss-bg-color);
+}
+
+[data-theme="dark"] .ss-frozen-header-row,
+[data-theme="dark"] .ss-frozen-rows-header {
+  background-color: var(--ss-header-bg);
+}
+
+[data-theme="dark"] .ss-frozen-header-cell,
+[data-theme="dark"] .ss-frozen-rows-header-cell {
+  background-color: var(--ss-header-bg);
+  color: var(--ss-header-text-color);
+}
+
+[data-theme="dark"] .ss-frozen-row,
+[data-theme="dark"] .ss-frozen-rows-row,
+[data-theme="dark"] .ss-frozen-cols-row {
+  background-color: var(--ss-row-bg);
+}
+
+[data-theme="dark"] .ss-frozen-row-number,
+[data-theme="dark"] .ss-frozen-cols-row-number {
+  background-color: var(--ss-row-number-bg);
+  color: var(--ss-row-number-text);
+}
+
+[data-theme="dark"] .ss-frozen-cols-header {
+  background-color: var(--ss-header-bg);
+}
+
+[data-theme="dark"] .ss-frozen-cols-header-cell {
+  background-color: var(--ss-header-bg);
+  color: var(--ss-header-text-color);
+}

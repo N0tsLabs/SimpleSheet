@@ -23,7 +23,7 @@
 .ss-scroll-container {
   position: relative;
   width: 100%;
-  height: 100%;
+  /* 高度由 JS 动态计算：总高度 - 表头高度 */
   overflow: auto;
   /* 禁用滚动锚定，防止点击时浏览器自动滚动 */
   overflow-anchor: none;
@@ -33,8 +33,7 @@
 
 /* 表头 */
 .ss-header {
-  position: sticky;
-  top: 0;
+  /* 表头在滚动容器外，不需要 sticky 定位 */
   z-index: var(--ss-z-header);
   background-color: var(--ss-header-bg);
   border-bottom: var(--ss-border-width) solid var(--ss-border-color);

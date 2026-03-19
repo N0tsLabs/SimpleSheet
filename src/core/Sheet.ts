@@ -362,6 +362,20 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                 onDeleteColumn: (ctx) => {
                     if (ctx.position) this.deleteColumn(ctx.position.col);
                 },
+                onFreeze: (ctx) => {
+                    if (ctx.position) {
+                        this.freeze(true, ctx.position.col + 1);
+                    }
+                },
+                onFreezeFirstRow: () => {
+                    this.freezeFirstRow();
+                },
+                onFreezeFirstCol: () => {
+                    this.freezeFirstCol();
+                },
+                onUnfreeze: () => {
+                    this.unfreeze();
+                },
             }, menuOptions),
         });
         this.contextMenu.mount(document.body);
@@ -426,6 +440,36 @@ export class Sheet extends EventEmitter<SheetEventMap> {
                         return this.options.columns[ctx.headerColIndex]?.readonly === true;
                     }
                     return false;
+                },
+                onFreeze: (ctx) => {
+                    if (ctx.headerColIndex !== undefined) {
+                        this.freeze(true, ctx.headerColIndex + 1);
+                    }
+                },
+                onFreezeFirstRow: () => {
+                    this.freezeFirstRow();
+                },
+                onFreezeFirstCol: () => {
+                    this.freezeFirstCol();
+                },
+                onUnfreeze: () => {
+                    this.unfreeze();
+                },
+                onUnfreezeHeader: () => {
+                    // 取消冻结表头但保留列冻结
+                    const currentConfig = this.renderer.getFrozenConfig();
+                    this.freeze(false, currentConfig.cols);
+                },
+                onUnfreezeCol: () => {
+                    // 取消冻结列但保留表头冻结
+                    const currentFreezeHeader = this.renderer.getFreezeHeader?.() ?? false;
+                    this.freeze(currentFreezeHeader, 0);
+                },
+                getFreezeHeader: () => {
+                    return this.renderer.getFreezeHeader?.() ?? false;
+                },
+                getFrozenCols: () => {
+                    return this.renderer.getFrozenConfig().cols;
                 },
             }, menuOptions),
         });
@@ -3165,6 +3209,53 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         const colIndex = this.options.columns.findIndex(col => col.key === columnKey);
         if (colIndex === -1) return;
         this.sort(colIndex, direction);
+    }
+
+    /**
+     * 设置冻结配置
+     * @param freezeHeader 是否冻结表头
+     * @param cols 冻结列数（从左侧）
+     */
+    freeze(freezeHeader: boolean, cols: number): void {
+        // 确保值在有效范围内
+        cols = Math.max(0, Math.min(cols, this.options.columns.length));
+        
+        this.renderer.setFrozenConfig(freezeHeader, cols);
+        
+        this.emit('freeze:change', { freezeHeader, frozenCols: cols });
+    }
+
+    /**
+     * 冻结表头
+     * 通过冻结功能固定表头，确保表头始终可见
+     */
+    freezeFirstRow(): void {
+        // 冻结表头，保持当前冻结列数不变
+        const currentConfig = this.renderer.getFrozenConfig();
+        this.freeze(true, currentConfig.cols);
+    }
+
+    /**
+     * 冻结首列
+     */
+    freezeFirstCol(): void {
+        // 冻结首列，保持当前表头冻结状态不变
+        const currentFreezeHeader = this.renderer.getFreezeHeader?.() ?? false;
+        this.freeze(currentFreezeHeader, 1);
+    }
+
+    /**
+     * 取消冻结
+     */
+    unfreeze(): void {
+        this.freeze(false, 0);
+    }
+
+    /**
+     * 获取冻结配置
+     */
+    getFrozenConfig(): { rows: number; cols: number } {
+        return this.renderer.getFrozenConfig();
     }
 
     /**

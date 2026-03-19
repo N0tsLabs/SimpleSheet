@@ -405,7 +405,11 @@ export function createDefaultMenuItems(handlers: {
   onShowAllRows?: (context: MenuContext) => void;
   onSortAsc?: (context: MenuContext) => void;
   onSortDesc?: (context: MenuContext) => void;
-}, options?: { showCopy?: boolean; showCut?: boolean; showPaste?: boolean; showInsertRowAbove?: boolean; showInsertRowBelow?: boolean; showDeleteRow?: boolean; showInsertColumnLeft?: boolean; showInsertColumnRight?: boolean; showDeleteColumn?: boolean; showClearColumn?: boolean }): MenuItem[] {
+  onFreeze?: (context: MenuContext) => void;
+  onFreezeFirstRow?: (context: MenuContext) => void;
+  onFreezeFirstCol?: (context: MenuContext) => void;
+  onUnfreeze?: (context: MenuContext) => void;
+}, options?: { showCopy?: boolean; showCut?: boolean; showPaste?: boolean; showInsertRowAbove?: boolean; showInsertRowBelow?: boolean; showDeleteRow?: boolean; showInsertColumnLeft?: boolean; showInsertColumnRight?: boolean; showDeleteColumn?: boolean; showClearColumn?: boolean; showFreeze?: boolean }): MenuItem[] {
   const opts = {
     showCopy: true,
     showCut: true,
@@ -417,6 +421,7 @@ export function createDefaultMenuItems(handlers: {
     showInsertColumnRight: true,
     showDeleteColumn: true,
     showClearColumn: true,
+    showFreeze: true,
     ...options,
   };
 
@@ -542,6 +547,35 @@ export function createDefaultMenuItems(handlers: {
     });
   }
 
+  // 冻结功能
+  if (opts.showFreeze !== false) {
+    items.push({ type: 'divider', label: '' });
+    
+    const freezeChildren: MenuItem[] = [];
+    
+    // 单元格右键：冻结到此单元格
+    freezeChildren.push({
+      key: 'freezeCurrent',
+      label: '冻结到此单元格',
+      icon: '🧊',
+      action: (context) => handlers.onFreeze?.(context),
+    });
+    
+    freezeChildren.push({
+      key: 'unfreeze',
+      label: '取消冻结',
+      icon: '🔓',
+      action: (context) => handlers.onUnfreeze?.(context),
+    });
+    
+    items.push({
+      key: 'freeze',
+      label: '冻结',
+      icon: '🧊',
+      children: freezeChildren,
+    });
+  }
+
   return items;
 }
 
@@ -560,7 +594,15 @@ export function createHeaderMenuItems(handlers: {
   onEditColumn?: (context: MenuContext) => void;
   onSetColumnReadonly?: (context: MenuContext, readonly: boolean) => void;
   getColumnReadonly?: (context: MenuContext) => boolean;
-}, options?: { showCopy?: boolean; showInsertColumnLeft?: boolean; showInsertColumnRight?: boolean; showDeleteColumn?: boolean; showSortAsc?: boolean; showSortDesc?: boolean; showFilter?: boolean }): MenuItem[] {
+  onFreeze?: (context: MenuContext) => void;
+  onFreezeFirstRow?: (context: MenuContext) => void;
+  onFreezeFirstCol?: (context: MenuContext) => void;
+  onUnfreeze?: (context: MenuContext) => void;
+  onUnfreezeHeader?: (context: MenuContext) => void;
+  onUnfreezeCol?: (context: MenuContext) => void;
+  getFreezeHeader?: () => boolean;
+  getFrozenCols?: () => number;
+}, options?: { showCopy?: boolean; showInsertColumnLeft?: boolean; showInsertColumnRight?: boolean; showDeleteColumn?: boolean; showSortAsc?: boolean; showSortDesc?: boolean; showFilter?: boolean; showFreeze?: boolean }): MenuItem[] {
   const opts = {
     showCopy: true,
     showInsertColumnLeft: true,
@@ -569,6 +611,7 @@ export function createHeaderMenuItems(handlers: {
     showSortAsc: true,
     showSortDesc: true,
     showFilter: true,
+    showFreeze: true,
     ...options,
   };
 
@@ -671,6 +714,59 @@ export function createHeaderMenuItems(handlers: {
   });
 
   items.push({ type: 'divider', label: '' });
+
+  // 冻结功能
+  if (opts.showFreeze !== false) {
+    const freezeChildren: MenuItem[] = [];
+    
+    // 表头右键：根据状态显示冻结或取消冻结表头
+    freezeChildren.push({
+      key: 'freezeHeader',
+      label: '',
+      getLabel: () => handlers.getFreezeHeader?.() ? '取消冻结表头' : '冻结表头',
+      icon: '⬆️',
+      action: (context) => {
+        if (handlers.getFreezeHeader?.()) {
+          handlers.onUnfreezeHeader?.(context);
+        } else {
+          handlers.onFreezeFirstRow?.(context);
+        }
+      },
+    });
+    
+    // 冻结此列：根据当前列是否已冻结显示不同标签
+    freezeChildren.push({
+      key: 'freezeCurrentCol',
+      label: '',
+      getLabel: (context) => {
+        const frozenCols = handlers.getFrozenCols?.() ?? 0;
+        const colIndex = context.headerColIndex ?? 0;
+        // 如果当前列在冻结范围内，显示取消冻结
+        return colIndex < frozenCols ? '取消冻结此列' : '冻结此列';
+      },
+      icon: '⬅️',
+      action: (context) => {
+        const frozenCols = handlers.getFrozenCols?.() ?? 0;
+        const colIndex = context.headerColIndex ?? 0;
+        if (colIndex < frozenCols) {
+          // 取消冻结此列（取消所有冻结）
+          handlers.onUnfreezeCol?.(context);
+        } else {
+          // 冻结此列
+          handlers.onFreeze?.(context);
+        }
+      },
+    });
+    
+    items.push({
+      key: 'freeze',
+      label: '冻结',
+      icon: '🧊',
+      children: freezeChildren,
+    });
+    
+    items.push({ type: 'divider', label: '' });
+  }
 
   // 删除列
   if (opts.showDeleteColumn) {

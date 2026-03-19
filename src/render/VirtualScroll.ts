@@ -33,6 +33,10 @@ interface VirtualScrollOptions {
   isColumnHidden?: (col: number) => boolean;
   /** 行隐藏检查函数 */
   isRowHidden?: (row: number) => boolean;
+  /** 冻结行数 */
+  frozenRows?: number;
+  /** 冻结列数 */
+  frozenCols?: number;
 }
 
 export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
@@ -50,6 +54,10 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
   private getTotalHeightFn?: () => number;
   private isColumnHiddenFn?: (col: number) => boolean;
   private isRowHiddenFn?: (row: number) => boolean;
+  
+  /** 冻结配置 */
+  private frozenRows: number = 0;
+  private frozenCols: number = 0;
 
   /** 内部行高缓存（支持动态行高） */
   private rowHeights: Map<number, number> = new Map();
@@ -88,6 +96,8 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
     this.getTotalHeightFn = options.getTotalHeight;
     this.isColumnHiddenFn = options.isColumnHidden;
     this.isRowHiddenFn = options.isRowHidden;
+    this.frozenRows = options.frozenRows ?? 0;
+    this.frozenCols = options.frozenCols ?? 0;
   }
 
   /**
@@ -175,6 +185,8 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
     if (options.rowNumberWidth !== undefined) this.rowNumberWidth = options.rowNumberWidth;
     if (options.showRowNumber !== undefined) this.showRowNumber = options.showRowNumber;
     if (options.getTotalHeight !== undefined) this.getTotalHeightFn = options.getTotalHeight;
+    if (options.frozenRows !== undefined) this.frozenRows = options.frozenRows;
+    if (options.frozenCols !== undefined) this.frozenCols = options.frozenCols;
 
     this.calculate();
   }
@@ -227,6 +239,39 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
    */
   getViewportWidth(): number {
     return this.cachedViewportWidth;
+  }
+
+  /**
+   * 获取冻结行高度
+   */
+  getFrozenRowsHeight(): number {
+    if (this.frozenRows === 0) return 0;
+    return this.frozenRows * this.rowHeight + this.headerHeight;
+  }
+
+  /**
+   * 获取冻结列宽度
+   */
+  getFrozenColsWidth(): number {
+    if (this.frozenCols === 0) return 0;
+    let width = this.showRowNumber ? this.rowNumberWidth : 0;
+    for (let i = 0; i < this.frozenCols && i < this.columns.length; i++) {
+      if (this.isColumnHiddenFn && this.isColumnHiddenFn(i)) {
+        continue;
+      }
+      width += this.columns[i]?.width ?? 100;
+    }
+    return width;
+  }
+
+  /**
+   * 获取冻结配置
+   */
+  getFrozenConfig(): { rows: number; cols: number } {
+    return {
+      rows: this.frozenRows,
+      cols: this.frozenCols,
+    };
   }
 
   /**
@@ -455,6 +500,7 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
 
   /**
    * 计算可视区域
+   * 支持冻结行列：主内容区从冻结数量后开始渲染
    */
   private calculate(): void {
     if (!this.scrollContainer || !this.viewport) return;
@@ -482,12 +528,14 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
     const visibleRows = Math.max(1, Math.ceil(viewportHeight / safeRowHeight));
     const bufferSize = Math.max(1, this.buffer * 2);
 
-    // 计算起始行
-    let startRow = Math.max(0, Math.floor(scrollTop / safeRowHeight) - bufferSize);
+    // 计算起始行（考虑冻结行偏移）
+    // 主内容区的起始行从冻结行数开始
+    const effectiveRowCount = Math.max(0, this.rowCount - this.frozenRows);
+    let startRow = this.frozenRows + Math.max(0, Math.floor(scrollTop / safeRowHeight) - bufferSize);
 
     // 关键修复：确保 startRow 不超过有效范围
     if (startRow > this.rowCount - 1) {
-      startRow = Math.max(0, this.rowCount - visibleRows - bufferSize);
+      startRow = Math.max(this.frozenRows, this.rowCount - visibleRows - bufferSize);
     }
 
     // 计算结束行
@@ -499,50 +547,54 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
     // 确保 endRow 不超过范围
     endRow = Math.min(endRow, this.rowCount - 1);
 
-    // 确保 startRow 最小为 0
-    startRow = Math.max(0, startRow);
+    // 确保 startRow 最小为冻结行数
+    startRow = Math.max(this.frozenRows, startRow);
 
     // 【重要】滚动时始终使用固定行高计算可视区域
     // 不使用 hasDynamicHeights，避免滚动时动态行高导致滚动锚定问题
-    // 动态行高只用于 offsetY 位置计算（见下方第565行）
+    // 动态行高只用于 offsetY 位置计算
     // 这样可以确保滚动位置稳定，不会因为动态行高计算导致滚动跳动
 
     // 最终保护：确保 startRow 和 endRow 都在有效范围内
-    startRow = Math.max(0, Math.min(startRow, this.rowCount - 1));
+    startRow = Math.max(this.frozenRows, Math.min(startRow, this.rowCount - 1));
     endRow = Math.max(startRow, Math.min(endRow, this.rowCount - 1));
     
-    // 计算可见列范围
+    // 计算可见列范围（考虑冻结列偏移）
+    // 主内容区的起始列从冻结列数开始
+    const frozenColsWidth = this.getFrozenColsWidth();
     let colOffset = this.showRowNumber ? this.rowNumberWidth : 0;
-    let startCol = 0;
+    let startCol = this.frozenCols;
     let endCol = this.columns.length - 1;
     
-    for (let i = 0; i < this.columns.length; i++) {
+    for (let i = this.frozenCols; i < this.columns.length; i++) {
       // 跳过隐藏列
       if (this.isColumnHiddenFn && this.isColumnHiddenFn(i)) {
         continue;
       }
       const colWidth = this.columns[i]?.width ?? 100;
-      if (colOffset + colWidth > scrollLeft) {
-        startCol = Math.max(0, i - this.buffer);
+      // 考虑冻结列宽度偏移
+      if (colOffset + colWidth > scrollLeft + frozenColsWidth) {
+        startCol = Math.max(this.frozenCols, i - this.buffer);
         break;
       }
       colOffset += colWidth;
     }
     
     colOffset = this.showRowNumber ? this.rowNumberWidth : 0;
-    for (let i = 0; i < this.columns.length; i++) {
+    for (let i = this.frozenCols; i < this.columns.length; i++) {
       // 跳过隐藏列
       if (this.isColumnHiddenFn && this.isColumnHiddenFn(i)) {
         continue;
       }
       colOffset += this.columns[i]?.width ?? 100;
-      if (colOffset > scrollLeft + viewportWidth) {
+      // 考虑冻结列宽度偏移
+      if (colOffset > scrollLeft + frozenColsWidth + viewportWidth) {
         endCol = Math.min(this.columns.length - 1, i + this.buffer);
         break;
       }
     }
 
-    // 计算 offsetY（使用内部行高缓存）
+    // 计算 offsetY（使用内部行高缓存，从冻结行后开始）
     const offsetY = this.getRowOffset(startRow);
     
     const newState: VirtualScrollState = {

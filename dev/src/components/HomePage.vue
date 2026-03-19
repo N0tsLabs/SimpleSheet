@@ -199,6 +199,7 @@ const getDefaultConfig = (): SheetOptions => {
       showFilter: true,
       showMergeCell: true,
       showUnmergeCell: true,
+      showFreeze: true,
     },
   };
 };
@@ -342,9 +343,35 @@ const initSheet = async () => {
         const hideColName = hideColIndex !== undefined && cols[hideColIndex] ? cols[hideColIndex].title : `列${(hideColIndex ?? 0) + 1}`;
         detail = `列：${hideColName}`;
         break;
+      case 'freeze':
+        const frozenRows = e.detail?.frozenRows ?? 0;
+        const frozenCols = e.detail?.frozenCols ?? 0;
+        if (frozenRows === 0 && frozenCols === 0) {
+          detail = '取消冻结';
+        } else {
+          const parts = [];
+          if (frozenRows > 0) parts.push(`冻结表头`);
+          if (frozenCols > 0) parts.push(`冻结 ${frozenCols} 列`);
+          detail = parts.join('，');
+        }
+        break;
     }
 
     log(`📋 配置变更 [${label}] ${detail ? '- ' + detail : ''}`);
+  });
+
+  // 冻结变更事件
+  sheet.on('freeze:change', (e) => {
+    const freezeHeader = e.freezeHeader ?? false;
+    const frozenCols = e.frozenCols ?? 0;
+    if (!freezeHeader && frozenCols === 0) {
+      log('🧊 冻结状态：已取消冻结');
+    } else {
+      const parts = [];
+      if (freezeHeader) parts.push(`表头已冻结`);
+      if (frozenCols > 0) parts.push(`${frozenCols} 列已冻结`);
+      log(`🧊 冻结状态：${parts.join('，')}`);
+    }
   });
 
   log('表格初始化完成');
