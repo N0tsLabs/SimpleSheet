@@ -104,23 +104,34 @@ export class FilePasteHandler extends EventEmitter<FilePasteEvents> {
       // 只要有选中的单元格就尝试处理
       const activeCell = this.options.getActiveCell();
       if (!activeCell) return;
-      
+
       const columnType = this.options.getColumnType(activeCell.col);
-      
+
       // 检查剪贴板中是否有文件
       const items = e.clipboardData?.items;
       if (!items) return;
-      
+
+      // 检查剪贴板中是否同时包含文本内容
+      // 从 Excel 复制时，剪贴板会同时包含文本数据和图片快照
+      let hasText = false;
       let hasFile = false;
       for (let i = 0; i < items.length; i++) {
-        if (items[i].kind === 'file') {
+        if (items[i].kind === 'string') {
+          hasText = true;
+        } else if (items[i].kind === 'file') {
           hasFile = true;
-          break;
         }
       }
-      
+
+      // 如果剪贴板同时有文本和文件，且当前列不是文件/链接类型，
+      // 说明用户是在粘贴文本数据（如 Excel 复制），不应拦截
+      if (!hasFile) return;
+      if (hasText && columnType !== 'file' && columnType !== 'link') {
+        return;
+      }
+
       // 如果有文件且是文件类型列，处理粘贴
-      if (hasFile && (columnType === 'file' || columnType === 'link')) {
+      if (columnType === 'file' || columnType === 'link') {
         await this.handlePaste(e);
       } else if (hasFile) {
         // 检查是否有图片

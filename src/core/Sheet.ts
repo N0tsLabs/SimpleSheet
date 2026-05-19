@@ -2090,6 +2090,21 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             columns: this.options.columns
         });
 
+        // 粘贴数据前，对数字类型列做格式化清理
+        // 处理 "1,766.80" → 1766.80 这类带千分位分隔符的格式
+        for (let i = 0; i < values.length; i++) {
+            for (let j = 0; j < values[i].length; j++) {
+                const colIndex = activeCell.col + j;
+                const col = this.options.columns[colIndex];
+                if (col?.type === "number" && typeof values[i][j] === "string") {
+                    const cleaned = this.parseNumberString(values[i][j]);
+                    if (cleaned !== null) {
+                        values[i][j] = cleaned;
+                    }
+                }
+            }
+        }
+
         // 粘贴数据
         this.historyManager.startBatch();
         this.dataModel.setRangeValues(activeCell.row, activeCell.col, values);
@@ -2132,6 +2147,19 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             num = Math.floor(num / 26) - 1;
         }
         return letter;
+    }
+
+    /**
+     * 清洗数字字符串：移除去千分位逗号、空格等非数字字符
+     * "1,766.80" → 1766.80
+     */
+    private parseNumberString(str: string): number | null {
+        // 移除数字之间的逗号（千分位分隔符），保留小数点
+        let cleaned = str.replace(/,(\d)/g, "$1");
+        // 移除其余非数字字符（保留 . 和 -）
+        cleaned = cleaned.replace(/[^\d.\-]/g, "");
+        const num = Number(cleaned);
+        return isNaN(num) ? null : num;
     }
 
     /**
