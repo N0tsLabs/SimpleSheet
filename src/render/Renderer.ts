@@ -1739,6 +1739,8 @@ export class Renderer {
     // 立即存储行的实际高度到缓存（确保虚拟滚动能使用）
     const oldHeight = this.rowHeights.get(rowIndex);
     this.rowHeights.set(rowIndex, maxHeight);
+    // 同步到 VirtualScroll，确保 getRowIndexFromY 用实际行高计算
+    this.virtualScroll.setRowHeight(rowIndex, maxHeight);
     
     // 更新行高样式
     setStyles(row, {

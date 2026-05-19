@@ -528,10 +528,9 @@ export class VirtualScroll extends EventEmitter<VirtualScrollEvents> {
     const visibleRows = Math.max(1, Math.ceil(viewportHeight / safeRowHeight));
     const bufferSize = Math.max(1, this.buffer * 2);
 
-    // 计算起始行（考虑冻结行偏移）
-    // 主内容区的起始行从冻结行数开始
-    const effectiveRowCount = Math.max(0, this.rowCount - this.frozenRows);
-    let startRow = this.frozenRows + Math.max(0, Math.floor(scrollTop / safeRowHeight) - bufferSize);
+    // 使用实际行高计算 scrollTop 对应的行索引
+    const scrollTopRow = this.getRowIndexFromY(scrollTop);
+    let startRow = Math.max(this.frozenRows, scrollTopRow - bufferSize);
 
     // 关键修复：确保 startRow 不超过有效范围
     if (startRow > this.rowCount - 1) {
