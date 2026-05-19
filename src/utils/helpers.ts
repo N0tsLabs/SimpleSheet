@@ -176,18 +176,68 @@ export function clamp(value: number, min: number, max: number): number {
 }
 
 /**
- * 解析 CSV 字符串
+ * 解析 CSV/TSV 字符串（支持引号包裹的字段，如 Excel 多行单元格）
+ * 规则：
+ * - 引号内的换行符属于字段内容，不视为行分隔符
+ * - 引号内的双引号 "" 转义为单个 "
+ * - 保留所有行（空行也保留），最后删除尾部空行
  */
 export function parseCSV(csv: string, delimiter = '\t'): string[][] {
   const rows: string[][] = [];
-  const lines = csv.split(/\r?\n/);
-  
-  for (const line of lines) {
-    if (line.trim()) {
-      rows.push(line.split(delimiter));
+  let currentRow: string[] = [];
+  let currentField = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < csv.length; i++) {
+    const char = csv[i];
+    const nextChar = csv[i + 1];
+
+    if (inQuotes) {
+      if (char === '"' && nextChar === '"') {
+        // 转义引号 ""
+        currentField += '"';
+        i++;
+      } else if (char === '"') {
+        // 结束引号
+        inQuotes = false;
+      } else {
+        currentField += char;
+      }
+    } else {
+      if (char === '"') {
+        inQuotes = true;
+      } else if (char === delimiter) {
+        // 列分隔符
+        currentRow.push(currentField);
+        currentField = '';
+      } else if (char === '\n') {
+        // 行分隔符
+        currentRow.push(currentField);
+        currentField = '';
+        rows.push(currentRow);
+        currentRow = [];
+      } else if (char === '\r') {
+        // 忽略 \r（\n 会处理换行）
+        continue;
+      } else {
+        currentField += char;
+      }
     }
   }
-  
+
+  // 处理最后的字段和行
+  if (currentField || currentRow.length > 0) {
+    currentRow.push(currentField);
+    rows.push(currentRow);
+  } else if (currentField === '' && currentRow.length === 0 && rows.length > 0) {
+    // 末尾空行不追加
+  }
+
+  // 删除尾部空行
+  while (rows.length > 0 && rows[rows.length - 1].every(f => f === '')) {
+    rows.pop();
+  }
+
   return rows;
 }
 

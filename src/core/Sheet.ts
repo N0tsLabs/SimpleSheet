@@ -2154,10 +2154,12 @@ export class Sheet extends EventEmitter<SheetEventMap> {
      * "1,766.80" → 1766.80
      */
     private parseNumberString(str: string): number | null {
+        if (!str) return null;
         // 移除数字之间的逗号（千分位分隔符），保留小数点
         let cleaned = str.replace(/,(\d)/g, "$1");
         // 移除其余非数字字符（保留 . 和 -）
         cleaned = cleaned.replace(/[^\d.\-]/g, "");
+        if (!cleaned) return null;
         const num = Number(cleaned);
         return isNaN(num) ? null : num;
     }
