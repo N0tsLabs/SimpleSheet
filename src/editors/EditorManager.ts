@@ -17,6 +17,7 @@ interface EditorEvents {
   'end': EditEvent;
   'cancel': EditEvent;
   'input': EditEvent;
+  'validation:error': { row: number; col: number; message: string; value: any };
 }
 
 interface ActiveEditor {
@@ -169,13 +170,20 @@ export class EditorManager extends EventEmitter<EditorEvents> {
     }
     
     // 验证
+    let newValue: any;
     const validation = editor.validate?.() ?? true;
     if (validation !== true) {
-      console.warn('Validation failed:', validation);
-      // 可以在这里显示错误提示
+      console.warn('[EditorManager] Validation failed:', validation);
+      this.emit('validation:error', {
+        row,
+        col,
+        message: typeof validation === 'string' ? validation : '输入内容校验未通过，已清空',
+        value: editor.getValue(),
+      });
+      newValue = null;
+    } else {
+      newValue = editor.getValue();
     }
-    
-    const newValue = editor.getValue();
     console.log('[EditorManager] editor.getValue() returned:', newValue);
     
     // 销毁编辑器

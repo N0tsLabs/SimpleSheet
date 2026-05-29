@@ -13,6 +13,13 @@ interface DataModelEvents {
   'row:delete': { index: number; data: RowData };
   'column:insert': { index: number; column: Column };
   'column:delete': { index: number; column: Column };
+  'validation:auto-clean': {
+    row: number;
+    col: number;
+    columnKey: string;
+    columnTitle: string;
+    originalValue: string;
+  };
 }
 
 export class DataModel extends EventEmitter<DataModelEvents> {
@@ -134,22 +141,48 @@ export class DataModel extends EventEmitter<DataModelEvents> {
     while (this.data.length <= row) {
       this.data.push({});
     }
-    
+
     const column = this.columns[col];
     if (!column) return false;
-    
+
+    // 类型校验：number 列自动清洗非数字字符串
+    if (column.type === 'number' && typeof value === 'string') {
+      if (value === '') {
+        value = null;
+      } else {
+        let cleaned = value.trim();
+        // 处理千分位格式（如 "1,766.80" → "1766.80"）
+        if (/,\d{3}/.test(cleaned)) {
+          cleaned = cleaned.replace(/,/g, '');
+        }
+        const num = Number(cleaned);
+        if (isNaN(num)) {
+          this.emit('validation:auto-clean', {
+            row,
+            col,
+            columnKey: column.key,
+            columnTitle: column.title || column.key,
+            originalValue: value,
+          });
+          value = null;
+        } else {
+          value = num;
+        }
+      }
+    }
+
     const oldValue = this.data[row][column.key];
     if (oldValue === value) return false;
-    
+
     this.data[row][column.key] = value;
-    
+
     if (!silent) {
       this.emit('change', {
         type: 'set',
         changes: [{ row, col, oldValue, newValue: value }],
       });
     }
-    
+
     return true;
   }
 

@@ -47,6 +47,9 @@ export type {
   SheetConfigChangeEvent,
   // 冻结相关类型
   FreezeChangeEvent,
+  // 校验相关类型
+  ValidationErrorEvent,
+  ValidationAutoCleanEvent,
 } from './types';
 
 // 导出 useTableScroll 钩子

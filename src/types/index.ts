@@ -591,6 +591,7 @@ export interface SheetEventMap {
 
   // 验证事件
   'validation:error': ValidationErrorEvent;
+  'validation:auto-clean': ValidationAutoCleanEvent;
 
   // 配置变更事件
   'config:change': SheetConfigChangeEvent;
@@ -824,6 +825,17 @@ export interface ValidationErrorEvent {
   col: number;
   message: string;
   value: any;
+}
+
+/**
+ * 自动清洗事件（number 列收到非数字字符串时触发）
+ */
+export interface ValidationAutoCleanEvent {
+  row: number;
+  col: number;
+  columnKey: string;
+  columnTitle: string;
+  originalValue: string;
 }
 
 /**

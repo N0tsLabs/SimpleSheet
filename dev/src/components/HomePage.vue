@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, nextTick, shallowRef, watch } from 'vue';
 import { SimpleSheet } from '../../../src';
 import type { Column, SheetOptions } from '../../../src';
+import { Toast } from '../../../src';
 import '../../../src/styles/index.css';
 
 // Monaco Editor
@@ -278,6 +279,19 @@ const initSheet = async () => {
     log(`❌ 文件上传失败: ${e.file.name} - ${e.error.message}`);
   });
 
+  // 数值自动清洗事件（number 列收到非数字字符串）
+  sheet.on('validation:auto-clean', (e: any) => {
+    const msg = `第${e.row + 1}行「${e.columnTitle}」含非数字内容"${e.originalValue}"，已自动清空`;
+    log(`⚠️ ${msg}`);
+    Toast.warning(msg, 3000);
+  });
+
+  // 编辑器校验错误事件
+  sheet.on('validation:error', (e: any) => {
+    log(`⚠️ 校验错误：${e.message}`);
+    Toast.warning(e.message, 3000);
+  });
+
   // 列隐藏/显示事件
   sheet.on('column:hide', (e) => {
     const cols = config.columns || [];
@@ -520,6 +534,16 @@ const validateAll = () => {
       sheet!.setValidationError(err.row, err.col, err.message);
     });
   }
+};
+
+// 测试数值自动清洗
+const testAutoClean = () => {
+  if (!sheet) return;
+  log('🧪 模拟写入非数字内容到第1行"年龄"列...');
+  // 直接通过 setCellValue 写入非数字字符串，触发 DataModel 的自动清洗
+  sheet.setCellValue(0, 8, 'NotANumber'); // col 8 = age (number 列)
+  log('🧪 模拟写入非数字内容到第2行"薪资"列...');
+  sheet.setCellValue(1, 9, 'C4P-SA13511A00'); // col 9 = salary (number 列)
 };
 
 // 导出
@@ -1564,6 +1588,7 @@ onUnmounted(() => {
 
         <div class="toolbar-group">
           <button class="btn" @click="validateAll">验证数据</button>
+          <button class="btn btn-warn" @click="testAutoClean">🧪 测试数值清洗</button>
           <button class="btn" @click="exportCSV">导出 CSV</button>
           <button class="btn" @click="exportJSON">导出 JSON</button>
         </div>
@@ -2054,6 +2079,17 @@ onUnmounted(() => {
 .btn-sm {
   padding: 6px 12px;
   font-size: 12px;
+}
+
+.btn-warn {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+.btn-warn:hover {
+  background: #fde68a;
+  border-color: #d97706;
 }
 
 .btn-icon {

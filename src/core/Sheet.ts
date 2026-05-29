@@ -799,6 +799,11 @@ export class Sheet extends EventEmitter<SheetEventMap> {
             this.emit("data:change", event);
         });
 
+        // 数据模型自动清洗事件（number 列收到非数字字符串）
+        this.dataModel.on("validation:auto-clean", (event) => {
+            this.emit("validation:auto-clean", event);
+        });
+
         // 选区变更事件
         this.selectionManager.on("change", (event) => {
             // 延迟更新选区显示，避免在事件处理期间触发布局变化导致滚动跳跃
@@ -967,6 +972,11 @@ export class Sheet extends EventEmitter<SheetEventMap> {
         // 编辑器输入事件
         this.editorManager.on("input", (event) => {
             this.emit("edit:input", event);
+        });
+
+        // 编辑器校验错误事件
+        this.editorManager.on("validation:error", (event) => {
+            this.emit("validation:error", event);
         });
 
         // 滚动时更新填充手柄位置
@@ -2150,18 +2160,19 @@ export class Sheet extends EventEmitter<SheetEventMap> {
     }
 
     /**
-     * 清洗数字字符串：移除去千分位逗号、空格等非数字字符
+     * 清洗数字字符串：仅移去除千分位逗号
      * "1,766.80" → 1766.80
+     * "C4P-SA13511A00" → "C4P-SA13511A00"（不做清理，交由 DataModel 校验）
      */
-    private parseNumberString(str: string): number | null {
-        if (!str) return null;
-        // 移除数字之间的逗号（千分位分隔符），保留小数点
-        let cleaned = str.replace(/,(\d)/g, "$1");
-        // 移除其余非数字字符（保留 . 和 -）
-        cleaned = cleaned.replace(/[^\d.\-]/g, "");
-        if (!cleaned) return null;
+    private parseNumberString(value: string): number | string | null {
+        if (!value) return null;
+        let cleaned = value.trim();
+        // 移除千分位逗号（逗号后紧跟3位数字的模式）
+        if (/,\d{3}/.test(cleaned)) {
+            cleaned = cleaned.replace(/,/g, '');
+        }
         const num = Number(cleaned);
-        return isNaN(num) ? null : num;
+        return isNaN(num) ? value : num;
     }
 
     /**
@@ -2286,15 +2297,8 @@ export class Sheet extends EventEmitter<SheetEventMap> {
      * 提交编辑
      */
     private commitEdit(): void {
-        const result = this.editorManager.endEdit();
-
-        if (result) {
-            this.dataModel.setCellValue(result.row, result.col, result.value);
-            this.renderer.refreshCell(result.row, result.col);
-        }
-
-        // 恢复键盘导航
-        this.keyboardManager.setEnabled(true);
+        this.editorManager.endEdit();
+        // 'end' 事件监听器负责 setCellValue / refreshCell / setEnabled
     }
 
     // ==================== 公共 API ====================

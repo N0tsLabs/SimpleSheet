@@ -34,9 +34,9 @@ export class NumberEditor extends BaseEditor {
   getValue(): any {
     const value = this.input?.value ?? '';
     if (value === '') return null;
-    
+
     const num = Number(value);
-    return isNaN(num) ? value : num;
+    return isNaN(num) ? null : num;
   }
 
   focus(): void {
